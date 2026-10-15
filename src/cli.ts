@@ -103,7 +103,9 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     return EXIT_CODES.GENERAL_ERROR;
   }
   const s = opts.json ? null : spinner();
-  s?.start("Fetching profile page…");
+  s?.start(
+    opts.cover ? "Extracting cover image…" : "Extracting profile image…",
+  );
 
   try {
     const result = opts.cover
