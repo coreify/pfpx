@@ -96,12 +96,16 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   }
 
   const timeoutMs = parseInt(opts.timeout, 10);
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+    process.stderr.write("✖ --timeout must be a positive integer.\n");
+    return EXIT_CODES.GENERAL_ERROR;
+  }
   const s = opts.json ? null : spinner();
   s?.start("Fetching profile page…");
 
   try {
     const result = await getProfilePicture(profileUrl, {
-      timeoutMs: isNaN(timeoutMs) ? 15_000 : timeoutMs,
+      timeoutMs,
       verbose: opts.verbose,
       verifyImages: opts.verify !== false,
     });

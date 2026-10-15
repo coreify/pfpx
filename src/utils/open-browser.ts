@@ -15,7 +15,7 @@ export async function openInBrowser(url: string): Promise<void> {
   if (platform === "darwin") {
     await run("open", [url]);
   } else if (platform === "win32") {
-    await run("cmd", ["/d", "/s", "/c", "start", "", url]);
+    await run("rundll32.exe", ["url.dll,FileProtocolHandler", url]);
   } else {
     await run("xdg-open", [url]);
   }

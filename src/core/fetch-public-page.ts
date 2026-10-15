@@ -30,40 +30,20 @@ const CRAWLER_USER_AGENT =
 
 const USER_AGENT = BROWSER_HEADERS["User-Agent"]!;
 
-function isPrivateIp(hostname: string): boolean {
-  return (
-    hostname === "localhost" ||
-    /^127\./.test(hostname) ||
-    /^10\./.test(hostname) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
-    /^192\.168\./.test(hostname) ||
-    hostname === "::1"
-  );
-}
-
-function isSafePublicUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:")
-      return false;
-    if (isPrivateIp(parsed.hostname)) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function isSafeProfilePageUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return isSafePublicUrl(url) && isFacebookHost(parsed.hostname);
+    return parsed.protocol === "https:" && isFacebookHost(parsed.hostname);
   } catch {
     return false;
   }
 }
 
 function timeoutSignal(timeoutMs: number): AbortSignal {
-  return AbortSignal.timeout(Math.max(1, timeoutMs));
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+    throw new RangeError("timeoutMs must be a positive integer");
+  }
+  return AbortSignal.timeout(timeoutMs);
 }
 
 export interface FetchPublicPageOptions {
@@ -119,6 +99,7 @@ export async function fetchPublicPage(
         );
       }
       try {
+        await response.body?.cancel();
         const crawlerResponse = await fetch(currentUrl, {
           signal: timeoutSignal(timeoutMs),
           headers: {
@@ -133,8 +114,13 @@ export async function fetchPublicPage(
         ) {
           response = crawlerResponse;
         }
-      } catch {
-        void 0;
+      } catch (error: unknown) {
+        if (
+          error instanceof Error &&
+          (error.name === "AbortError" || error.name === "TimeoutError")
+        ) {
+          throw new TimeoutError(currentUrl);
+        }
       }
     }
 
@@ -162,6 +148,7 @@ export async function fetchPublicPage(
                 "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               "Accept-Language": "en-US,en;q=0.9",
             },
+            redirect: "manual",
           });
           if (mobileRes.ok) {
             response = mobileRes;
@@ -347,8 +334,8 @@ export interface DownloadImageOptions extends FetchPublicPageOptions {
 export interface DownloadedImage {
   data: Uint8Array;
   contentType: string;
-  width: number | null;
-  height: number | null;
+  width: number;
+  height: number;
 }
 
 export async function downloadFacebookImage(
@@ -414,11 +401,14 @@ export async function downloadFacebookImage(
     offset += chunk.byteLength;
   }
   const dimensions = parseImageDimensions(data, contentType);
+  if (!dimensions) {
+    throw new NetworkError("Image data does not match its content type");
+  }
   return {
     data,
     contentType,
-    width: dimensions?.width ?? null,
-    height: dimensions?.height ?? null,
+    width: dimensions.width,
+    height: dimensions.height,
   };
 }
 

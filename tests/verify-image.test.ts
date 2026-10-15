@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchImageDimensions } from "../src/core/fetch-public-page.js";
+import {
+  downloadFacebookImage,
+  fetchImageDimensions,
+} from "../src/core/fetch-public-page.js";
 import { verifyCandidates } from "../src/core/verify-image.js";
 import type { ImageCandidate } from "../src/core/types.js";
 
@@ -253,5 +256,85 @@ describe("verifyCandidates", () => {
     expect(verified.map((candidate) => candidate.url)).toEqual(
       candidates.map((candidate) => candidate.url),
     );
+  });
+});
+
+describe("downloadFacebookImage", () => {
+  beforeEach(() => {
+    vi.mocked(fetch).mockReset();
+  });
+
+  it("downloads a validated image and returns dimensions", async () => {
+    const bytes = createPngBytes(640, 480);
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeStreamResponse(bytes, "image/png"),
+    );
+    const result = await downloadFacebookImage(CDN_URL);
+    expect(result.data).toEqual(bytes);
+    expect(result.contentType).toBe("image/png");
+    expect(result.width).toBe(640);
+    expect(result.height).toBe(480);
+  });
+
+  it("follows safe CDN redirects", async () => {
+    const redirected = `${CDN_URL}&redirected=1`;
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(null, { status: 302, headers: { location: redirected } }),
+      )
+      .mockResolvedValueOnce(
+        makeStreamResponse(createJpegBytes(300, 200), "image/jpeg"),
+      );
+    const result = await downloadFacebookImage(CDN_URL);
+    expect(result.width).toBe(300);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects unsafe URLs and invalid limits", async () => {
+    await expect(
+      downloadFacebookImage("https://example.com/image.jpg"),
+    ).rejects.toThrow("Image download failed");
+    await expect(
+      downloadFacebookImage(CDN_URL, { maxBytes: 0 }),
+    ).rejects.toThrow("positive integer");
+  });
+
+  it("rejects unsupported MIME types", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeStreamResponse(new Uint8Array([1]), "text/html"),
+    );
+    await expect(downloadFacebookImage(CDN_URL)).rejects.toThrow(
+      "Unsupported image content type",
+    );
+  });
+
+  it("rejects image data that does not match its MIME type", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeStreamResponse(new Uint8Array([1, 2, 3]), "image/png"),
+    );
+    await expect(downloadFacebookImage(CDN_URL)).rejects.toThrow(
+      "does not match",
+    );
+  });
+
+  it("rejects declared and streamed oversized images", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(createPngBytes(1, 1), {
+          headers: {
+            "content-type": "image/png",
+            "content-length": "100",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeStreamResponse(createPngBytes(2, 2), "image/png"),
+      );
+    await expect(
+      downloadFacebookImage(CDN_URL, { maxBytes: 50 }),
+    ).rejects.toThrow("exceeds 50 byte limit");
+    await expect(
+      downloadFacebookImage(CDN_URL, { maxBytes: 10 }),
+    ).rejects.toThrow("exceeds 10 byte limit");
   });
 });
