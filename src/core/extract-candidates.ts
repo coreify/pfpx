@@ -44,6 +44,16 @@ function createCandidatePair(
   return list;
 }
 
+function createCoverCandidatePair(
+  rawUrl: string,
+  source: "cover-html" | "cover-data",
+): ImageCandidate[] {
+  return createCandidatePair(rawUrl, source).filter((candidate) => {
+    const hostname = new URL(candidate.url).hostname;
+    return hostname.endsWith(".fbcdn.net") || hostname.endsWith(".fbsbx.com");
+  });
+}
+
 function getCandidateDedupKey(url: string): string {
   try {
     const parsed = new URL(url);
@@ -241,7 +251,7 @@ function collectCdnUrls(
 ): void {
   if (depth > 20 || value == null) return;
   if (typeof value === "string") {
-    candidates.push(...createCandidatePair(value, "cover-data"));
+    candidates.push(...createCoverCandidatePair(value, "cover-data"));
     return;
   }
   if (typeof value !== "object") return;
@@ -291,7 +301,7 @@ function extractCoverUrlsFromScript(
         /https:[^"'\\<>\s]+(?:fbcdn\.net|facebook\.com|fbsbx\.com)[^"'\\<>\s]*/g,
       ) ?? [];
     for (const url of urls.slice(0, 20)) {
-      candidates.push(...createCandidatePair(url, "cover-data"));
+      candidates.push(...createCoverCandidatePair(url, "cover-data"));
     }
   }
 }
@@ -321,7 +331,7 @@ export function extractCoverCandidates(
 
     for (const rawUrl of [image.attr("src"), image.attr("data-src")]) {
       if (rawUrl) {
-        candidates.push(...createCandidatePair(rawUrl, "cover-html"));
+        candidates.push(...createCoverCandidatePair(rawUrl, "cover-html"));
       }
     }
   });

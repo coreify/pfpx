@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { intro, text, spinner, outro, isCancel, cancel } from "@clack/prompts";
-import { getProfilePicture } from "./commands/get.js";
+import { getCoverPicture, getProfilePicture } from "./commands/get.js";
 import { printResult, printError } from "./utils/output.js";
 import { openInBrowser } from "./utils/open-browser.js";
 import { copyToClipboard } from "./utils/clipboard.js";
@@ -32,6 +32,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     .argument("[url]", "Facebook profile URL")
     .option("--json", "Output JSON to stdout; diagnostics to stderr")
     .option("--all", "Show all discovered image candidates")
+    .option("--cover", "Retrieve cover picture instead of profile picture")
     .option("--open", "Open the image URL in the default browser")
     .option("--copy", "Copy the image URL to the clipboard")
     .option("--verbose", "Show extraction steps and request info")
@@ -45,6 +46,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   let opts: {
     json?: boolean;
     all?: boolean;
+    cover?: boolean;
     open?: boolean;
     copy?: boolean;
     verbose?: boolean;
@@ -104,11 +106,16 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   s?.start("Fetching profile page…");
 
   try {
-    const result = await getProfilePicture(profileUrl, {
-      timeoutMs,
-      verbose: opts.verbose,
-      verifyImages: opts.verify !== false,
-    });
+    const result = opts.cover
+      ? await getCoverPicture(profileUrl, {
+          timeoutMs,
+          verbose: opts.verbose,
+        })
+      : await getProfilePicture(profileUrl, {
+          timeoutMs,
+          verbose: opts.verbose,
+          verifyImages: opts.verify !== false,
+        });
 
     s?.stop("Done.");
 

@@ -1,6 +1,6 @@
 # @coreify/pfpx
 
-Extract highest-resolution public Facebook profile pictures (up to 2048×2048).
+Extract highest-resolution public Facebook profile and cover pictures.
 
 [![npm](https://img.shields.io/npm/v/@coreify/pfpx)](https://www.npmjs.com/package/@coreify/pfpx)
 [![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
@@ -17,6 +17,7 @@ npx @coreify/pfpx <url>
 
 ```bash
 pfpx https://www.facebook.com/zuck
+pfpx --cover https://www.facebook.com/zuck
 ```
 
 ### Options
@@ -27,6 +28,7 @@ pfpx https://www.facebook.com/zuck
 | `--open`      | Open image URL in default browser              |
 | `--copy`      | Copy image URL to clipboard                    |
 | `--all`       | Show all discovered image candidates           |
+| `--cover`     | Retrieve cover instead of profile picture      |
 | `--no-verify` | Skip dimension verification (faster)           |
 | `--verbose`   | Print extraction steps and request diagnostics |
 
@@ -34,6 +36,7 @@ pfpx https://www.facebook.com/zuck
 
 ```typescript
 import {
+  getCoverPicture,
   getCoverPictureImage,
   getProfilePicture,
   getProfilePictureImage,
@@ -54,6 +57,9 @@ console.log(image.data, image.contentType);
 // Returns original public cover bytes only when they meet the high-quality floor.
 const cover = await getCoverPictureImage("zuck");
 console.log(cover.data, cover.width, cover.height);
+
+const coverMetadata = await getCoverPicture("zuck");
+console.log(coverMetadata.imageUrl);
 ```
 
 ## Notes

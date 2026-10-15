@@ -209,3 +209,21 @@ export async function getCoverPictureImage(
   if (candidates.length > 0 && lastError instanceof Error) throw lastError;
   throw new NoImageFoundError("No downloadable public cover picture found.");
 }
+
+export async function getCoverPicture(
+  rawInput: string,
+  options: GetProfilePictureImageOptions = {},
+): Promise<ProfileImageResult> {
+  const result = await getCoverPictureImage(rawInput, options);
+  return {
+    inputUrl: result.inputUrl,
+    profileUrl: result.profileUrl,
+    identifier: result.identifier,
+    imageUrl: result.imageUrl,
+    width: result.width,
+    height: result.height,
+    source: result.source,
+    candidates: result.candidates,
+    warning: result.warning,
+  };
+}

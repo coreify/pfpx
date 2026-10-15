@@ -40,6 +40,20 @@ function createJpegBytes(width: number, height: number): Uint8Array {
   return buf;
 }
 
+function createAvifBytes(width: number, height: number): Uint8Array {
+  const buf = new Uint8Array(24);
+  buf.set([0, 0, 0, 20, 0x69, 0x73, 0x70, 0x65], 0);
+  buf[12] = (width >> 24) & 0xff;
+  buf[13] = (width >> 16) & 0xff;
+  buf[14] = (width >> 8) & 0xff;
+  buf[15] = width & 0xff;
+  buf[16] = (height >> 24) & 0xff;
+  buf[17] = (height >> 16) & 0xff;
+  buf[18] = (height >> 8) & 0xff;
+  buf[19] = height & 0xff;
+  return buf;
+}
+
 function createWebpVP8LBytes(width: number, height: number): Uint8Array {
   const buf = new Uint8Array(26);
   buf[0] = 0x52;
@@ -274,6 +288,17 @@ describe("downloadFacebookImage", () => {
     expect(result.contentType).toBe("image/png");
     expect(result.width).toBe(640);
     expect(result.height).toBe(480);
+  });
+
+  it("downloads Facebook AVIF covers and returns dimensions", async () => {
+    const bytes = createAvifBytes(2553, 945);
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeStreamResponse(bytes, "image/avif"),
+    );
+    const result = await downloadFacebookImage(CDN_URL);
+    expect(result.contentType).toBe("image/avif");
+    expect(result.width).toBe(2553);
+    expect(result.height).toBe(945);
   });
 
   it("follows safe CDN redirects", async () => {

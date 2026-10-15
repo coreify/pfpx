@@ -1,7 +1,7 @@
 {
   "name": "@coreify/pfpx",
-  "version": "1.2.0",
-  "description": "Extract highest-resolution public Facebook profile pictures.",
+  "version": "1.2.1",
+  "description": "Extract highest-resolution public Facebook profile and cover pictures.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

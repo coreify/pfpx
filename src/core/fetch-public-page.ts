@@ -243,6 +243,7 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/png",
   "image/webp",
   "image/gif",
+  "image/avif",
 ]);
 
 export async function fetchImageDimensions(
@@ -420,6 +421,7 @@ function parseImageDimensions(
   if (mime === "image/png") return parsePngDimensions(buf);
   if (mime === "image/webp") return parseWebpDimensions(buf);
   if (mime === "image/gif") return parseGifDimensions(buf);
+  if (mime === "image/avif") return parseAvifDimensions(buf);
   return null;
 }
 
@@ -552,4 +554,22 @@ function parseGifDimensions(
   const width = readUint16LE(buf, 6);
   const height = readUint16LE(buf, 8);
   return width > 0 && height > 0 ? { width, height } : null;
+}
+
+function parseAvifDimensions(
+  buf: Uint8Array,
+): { width: number; height: number } | null {
+  for (let i = 4; i <= buf.length - 16; i++) {
+    if (
+      buf[i] === 0x69 &&
+      buf[i + 1] === 0x73 &&
+      buf[i + 2] === 0x70 &&
+      buf[i + 3] === 0x65
+    ) {
+      const width = readUint32BE(buf, i + 8);
+      const height = readUint32BE(buf, i + 12);
+      if (width > 0 && height > 0) return { width, height };
+    }
+  }
+  return null;
 }

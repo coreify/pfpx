@@ -1,6 +1,7 @@
 export {
   getProfilePicture,
   getProfilePictureImage,
+  getCoverPicture,
   getCoverPictureImage,
 } from "./commands/get.js";
 export {

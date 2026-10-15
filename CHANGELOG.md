@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.1] - 2026-10-15
+
+### Added
+
+- `getCoverPicture()` API and `--cover` CLI option
+
+### Fixed
+
+- Facebook AVIF cover downloads being reported as network errors
+- Facebook photo-page URLs being treated as image candidates
+
 ## [1.2.0] - 2026-10-15
 
 ### Added

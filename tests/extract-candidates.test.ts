@@ -140,6 +140,14 @@ describe("extractCoverCandidates", () => {
     });
   });
 
+  it("rejects Facebook photo-page links as cover image candidates", () => {
+    const candidates = extractCoverCandidates(
+      `<script type="application/json">${JSON.stringify({ cover_photo: { url: "https://www.facebook.com/photo/?fbid=123" } })}</script>`,
+    );
+
+    expect(candidates).toHaveLength(0);
+  });
+
   it("extracts escaped cover URLs from JavaScript payloads", () => {
     const url = `${CDN}/cover.jpg?oe=abc`;
     const escaped = url.replaceAll("/", "\\/");
