@@ -133,6 +133,30 @@ export async function fetchPublicPage(
       const location = response.headers.get("location");
       if (!location) throw new NetworkError("Redirect with no Location header");
       const next = new URL(location, currentUrl).toString();
+
+      if (next.includes("login.") || next.includes("/login/")) {
+        try {
+          const orig = new URL(url);
+          const mobileUrl = `https://m.facebook.com${orig.pathname}${orig.search}`;
+          const mobileRes = await fetch(mobileUrl, {
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+              Accept:
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "Accept-Language": "en-US,en;q=0.9",
+            },
+          });
+          if (mobileRes.ok) {
+            response = mobileRes;
+            currentUrl = mobileUrl;
+            break;
+          }
+        } catch {
+          void 0;
+        }
+      }
+
       currentUrl = next;
       redirectCount++;
       continue;
