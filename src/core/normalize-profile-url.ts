@@ -1,4 +1,8 @@
-import { InvalidUrlError, NotFacebookError } from "../utils/errors.js";
+import {
+  InvalidUrlError,
+  NotFacebookError,
+  UnsupportedUrlError,
+} from "../utils/errors.js";
 
 const ALLOWED_FACEBOOK_HOSTS = new Set([
   "facebook.com",
@@ -33,6 +37,25 @@ export function isFacebookHost(hostname: string): boolean {
 export function isAllowedProfileHost(hostname: string): boolean {
   return isFacebookHost(hostname);
 }
+
+const PROFILE_SUBTABS = new Set([
+  "about",
+  "photos",
+  "photos_albums",
+  "photos_by",
+  "friends",
+  "followers",
+  "following",
+  "reels",
+  "videos",
+  "map",
+  "reviews",
+  "mentions",
+  "sports",
+  "music",
+  "movies",
+  "books",
+]);
 
 export function normalizeProfileUrl(raw: string): string {
   let input = raw.trim();
@@ -71,18 +94,102 @@ export function normalizeProfileUrl(raw: string): string {
     url.hostname = "www.facebook.com";
   }
 
-  if (url.pathname === "/profile.php") {
-    const id = url.searchParams.get("id");
-    for (const key of [...url.searchParams.keys()]) {
-      if (key !== "id") {
-        url.searchParams.delete(key);
-      }
-    }
-    if (id) url.searchParams.set("id", id);
-  } else {
-    for (const key of [...url.searchParams.keys()]) {
-      url.searchParams.delete(key);
-    }
+  const profileId = url.searchParams.get("profile_id");
+  if (profileId && /^\d+$/.test(profileId)) {
+    return `https://www.facebook.com/profile.php?id=${profileId}`;
+  }
+
+  const idParam = url.searchParams.get("id");
+  if (idParam && /^\d+$/.test(idParam)) {
+    return `https://www.facebook.com/profile.php?id=${idParam}`;
+  }
+
+  const rawPath = url.pathname.replace(/\/+$/, "");
+
+  const peopleMatch = rawPath.match(/^\/people\/[^/]+\/(\d+)$/);
+  if (peopleMatch && peopleMatch[1]) {
+    return `https://www.facebook.com/profile.php?id=${peopleMatch[1]}`;
+  }
+
+  const pMatch = rawPath.match(/^\/p\/(?:[a-zA-Z0-9.-]+-)?(\d+)$/);
+  if (pMatch && pMatch[1]) {
+    return `https://www.facebook.com/profile.php?id=${pMatch[1]}`;
+  }
+
+  const userMatch = rawPath.match(/^\/(?:user|profile)\/(\d+)$/);
+  if (userMatch && userMatch[1]) {
+    return `https://www.facebook.com/profile.php?id=${userMatch[1]}`;
+  }
+
+  const segments = rawPath.split("/").filter(Boolean);
+  const first = (segments[0] || "").toLowerCase();
+  const second = (segments[1] || "").toLowerCase();
+
+  if (first === "share") {
+    if (second === "p") throw new UnsupportedUrlError(raw, "post", "This link is a Facebook post, not a profile.");
+    if (second === "r") throw new UnsupportedUrlError(raw, "reel", "This link is a Facebook reel, not a profile.");
+    if (second === "v") throw new UnsupportedUrlError(raw, "video", "This link is a Facebook video, not a profile.");
+    throw new UnsupportedUrlError(raw, "share", "This link is a generic Facebook share link.");
+  }
+
+  if (first === "posts" || first === "story.php" || first === "permalink.php" || second === "posts" || second === "activity") {
+    throw new UnsupportedUrlError(raw, "post", "This link is a Facebook post, not a profile.");
+  }
+
+  if (first === "photo.php" || first === "photo") {
+    throw new UnsupportedUrlError(raw, "photo", "This link is a Facebook photo, not a profile.");
+  }
+
+  if (first === "watch" || first === "reel" || first === "reels" || (segments.length >= 3 && second === "videos")) {
+    throw new UnsupportedUrlError(raw, "video", "This link is a Facebook video or reel, not a profile.");
+  }
+
+  if (first === "groups" || first === "group") {
+    throw new UnsupportedUrlError(raw, "group", "This link is a Facebook group, not a profile.");
+  }
+
+  if (first === "events" || first === "event") {
+    throw new UnsupportedUrlError(raw, "event", "This link is a Facebook event, not a profile.");
+  }
+
+  if (first === "marketplace") {
+    throw new UnsupportedUrlError(raw, "marketplace", "This link is a Marketplace listing, not a profile.");
+  }
+
+  if (first === "gaming") {
+    throw new UnsupportedUrlError(raw, "gaming", "This link is a Facebook Gaming page, not a profile.");
+  }
+
+  if (first === "fundraisers") {
+    throw new UnsupportedUrlError(raw, "fundraiser", "This link is a Facebook fundraiser, not a profile.");
+  }
+
+  const sysPages = new Set([
+    "friends",
+    "notifications",
+    "settings",
+    "messages",
+    "saved",
+    "login",
+    "recover",
+    "help",
+    "search",
+    "policies",
+    "terms",
+    "privacy",
+    "ads",
+    "business",
+  ]);
+  if (sysPages.has(first)) {
+    throw new UnsupportedUrlError(raw, "navigation", `This is a Facebook ${first} page, not a profile.`);
+  }
+
+  if (segments.length >= 2 && (PROFILE_SUBTABS.has(second) || second.startsWith("about_"))) {
+    return `https://www.facebook.com/${segments[0]}`;
+  }
+
+  for (const key of [...url.searchParams.keys()]) {
+    url.searchParams.delete(key);
   }
 
   if (url.pathname !== "/" && url.pathname.endsWith("/")) {

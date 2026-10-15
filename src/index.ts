@@ -8,6 +8,7 @@ export {
   InvalidUrlError,
   NotFacebookError,
   NoImageFoundError,
+  UnsupportedUrlError,
   RateLimitedError,
   TimeoutError,
   NetworkError,

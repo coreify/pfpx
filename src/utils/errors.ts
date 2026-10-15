@@ -52,3 +52,18 @@ export class NoImageFoundError extends PfpxError {
     this.name = "NoImageFoundError";
   }
 }
+
+export class UnsupportedUrlError extends PfpxError {
+  constructor(
+    url: string,
+    public readonly category: string = "unsupported",
+    message?: string,
+  ) {
+    super(
+      message || `Unsupported Facebook URL (${category}): ${url}`,
+      "UNSUPPORTED_URL",
+    );
+    this.name = "UnsupportedUrlError";
+  }
+}
+

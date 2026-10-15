@@ -5,7 +5,11 @@ import {
   isAllowedProfileHost,
   isSafeFacebookCdnUrl,
 } from "../src/core/normalize-profile-url.js";
-import { InvalidUrlError, NotFacebookError } from "../src/utils/errors.js";
+import {
+  InvalidUrlError,
+  NotFacebookError,
+  UnsupportedUrlError,
+} from "../src/utils/errors.js";
 
 describe("normalizeProfileUrl", () => {
   it("normalizes www.facebook.com username URL", () => {
@@ -52,6 +56,69 @@ describe("normalizeProfileUrl", () => {
   it("strips trailing slash", () => {
     const result = normalizeProfileUrl("https://www.facebook.com/user/");
     expect(result).not.toMatch(/\/$/);
+  });
+
+  it("normalizes friends suggestions with profile_id param", () => {
+    const result = normalizeProfileUrl(
+      "https://www.facebook.com/friends/suggestions/?profile_id=61567168861894",
+    );
+    expect(result).toBe("https://www.facebook.com/profile.php?id=61567168861894");
+  });
+
+  it("normalizes /people/name/id format", () => {
+    const result = normalizeProfileUrl(
+      "https://www.facebook.com/people/Jannatul-Ferdows/61567168861894/",
+    );
+    expect(result).toBe("https://www.facebook.com/profile.php?id=61567168861894");
+  });
+
+  it("normalizes /p/name-id and /p/id formats", () => {
+    expect(
+      normalizeProfileUrl("https://www.facebook.com/p/Jannatul-Ferdows-61567168861894/"),
+    ).toBe("https://www.facebook.com/profile.php?id=61567168861894");
+
+    expect(
+      normalizeProfileUrl("https://www.facebook.com/p/61567168861894/"),
+    ).toBe("https://www.facebook.com/profile.php?id=61567168861894");
+  });
+
+  it("strips vanity profile tabs like /about and /photos", () => {
+    expect(normalizeProfileUrl("https://www.facebook.com/zuck/about")).toBe(
+      "https://www.facebook.com/zuck",
+    );
+    expect(normalizeProfileUrl("https://www.facebook.com/zuck/photos")).toBe(
+      "https://www.facebook.com/zuck",
+    );
+  });
+
+  it("throws UnsupportedUrlError for non-profile URLs", () => {
+    expect(() =>
+      normalizeProfileUrl("https://www.facebook.com/groups/reactjs"),
+    ).toThrow(UnsupportedUrlError);
+
+    expect(() =>
+      normalizeProfileUrl("https://www.facebook.com/watch/?v=12345678"),
+    ).toThrow(UnsupportedUrlError);
+
+    expect(() =>
+      normalizeProfileUrl("https://www.facebook.com/reel/12345678"),
+    ).toThrow(UnsupportedUrlError);
+
+    expect(() =>
+      normalizeProfileUrl("https://www.facebook.com/photo.php?fbid=12345"),
+    ).toThrow(UnsupportedUrlError);
+
+    expect(() =>
+      normalizeProfileUrl("https://www.facebook.com/events/12345"),
+    ).toThrow(UnsupportedUrlError);
+
+    expect(() =>
+      normalizeProfileUrl("https://www.facebook.com/marketplace/item/12345"),
+    ).toThrow(UnsupportedUrlError);
+
+    expect(() =>
+      normalizeProfileUrl("https://www.facebook.com/friends/suggestions/"),
+    ).toThrow(UnsupportedUrlError);
   });
 
   it("throws InvalidUrlError for garbage input", () => {
