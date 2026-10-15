@@ -1,0 +1,86 @@
+{
+  "name": "@coreify/pfpx",
+  "version": "1.0.0",
+  "description": "CLI to retrieve the highest-resolution public Facebook profile picture URL.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "pfpx": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Coreify",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/coreify/pfpx.git"
+  },
+  "bugs": {
+    "url": "https://github.com/coreify/pfpx/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "build:watch": "tsup --watch",
+    "dev": "tsx src/cli.ts",
+    "check": "bun run format && bun run format:check && bun run lint && bun run typecheck && bun run test:coverage && bun run build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "prepack": "bun run build",
+    "prepublishOnly": "bun run check",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.8.1",
+    "cheerio": "^1.2.0",
+    "commander": "^15.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.5",
+    "@vitest/coverage-v8": "^5.0.4",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
+    "jiti": "^2.7.0",
+    "prettier": "^3.9.10",
+    "terser": "^5.51.2",
+    "tsup": "^9.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.4"
+  },
+  "keywords": [
+    "facebook",
+    "profile",
+    "picture",
+    "image",
+    "url",
+    "cli",
+    "pfpx"
+  ]
+}
