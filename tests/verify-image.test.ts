@@ -75,10 +75,10 @@ function createWebpVP8Bytes(width: number, height: number): Uint8Array {
   buf[13] = 0x50;
   buf[14] = 0x38;
   buf[15] = 0x20;
-  buf[26] = (width >> 8) & 0xff;
-  buf[27] = width & 0xff;
-  buf[28] = (height >> 8) & 0xff;
-  buf[29] = height & 0xff;
+  buf[26] = width & 0xff;
+  buf[27] = (width >> 8) & 0xff;
+  buf[28] = height & 0xff;
+  buf[29] = (height >> 8) & 0xff;
   return buf;
 }
 

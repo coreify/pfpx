@@ -3,6 +3,10 @@ import {
   RateLimitedError,
   TimeoutError,
 } from "../utils/errors.js";
+import {
+  isFacebookHost,
+  isSafeFacebookCdnUrl,
+} from "./normalize-profile-url.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_REDIRECTS = 5;
@@ -37,7 +41,7 @@ function isPrivateIp(hostname: string): boolean {
   );
 }
 
-function isSafeRedirectUrl(url: string): boolean {
+function isSafePublicUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:")
@@ -47,6 +51,19 @@ function isSafeRedirectUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isSafeProfilePageUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return isSafePublicUrl(url) && isFacebookHost(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function timeoutSignal(timeoutMs: number): AbortSignal {
+  return AbortSignal.timeout(Math.max(1, timeoutMs));
 }
 
 export interface FetchPublicPageOptions {
@@ -71,12 +88,9 @@ export async function fetchPublicPage(
   let redirectCount = 0;
 
   while (redirectCount <= MAX_REDIRECTS) {
-    if (!isSafeRedirectUrl(currentUrl)) {
+    if (!isSafeProfilePageUrl(currentUrl)) {
       throw new NetworkError(`Unsafe redirect target: ${currentUrl}`);
     }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     let response: Response;
     try {
@@ -84,20 +98,20 @@ export async function fetchPublicPage(
         process.stderr.write(`[pfpx] GET ${currentUrl}\n`);
       }
       response = await fetch(currentUrl, {
-        signal: controller.signal,
+        signal: timeoutSignal(timeoutMs),
         headers: BROWSER_HEADERS,
         redirect: "manual",
       });
     } catch (err: unknown) {
-      clearTimeout(timer);
-      if (err instanceof Error && err.name === "AbortError") {
+      if (
+        err instanceof Error &&
+        (err.name === "AbortError" || err.name === "TimeoutError")
+      ) {
         throw new TimeoutError(currentUrl);
       }
       const msg = err instanceof Error ? err.message : String(err);
       throw new NetworkError(`Fetch failed: ${msg}`);
     }
-    clearTimeout(timer);
-
     if (response.status === 400) {
       if (verbose) {
         process.stderr.write(
@@ -106,6 +120,7 @@ export async function fetchPublicPage(
       }
       try {
         const crawlerResponse = await fetch(currentUrl, {
+          signal: timeoutSignal(timeoutMs),
           headers: {
             "User-Agent": CRAWLER_USER_AGENT,
             Accept: "*/*",
@@ -139,6 +154,7 @@ export async function fetchPublicPage(
           const orig = new URL(url);
           const mobileUrl = `https://m.facebook.com${orig.pathname}${orig.search}`;
           const mobileRes = await fetch(mobileUrl, {
+            signal: timeoutSignal(timeoutMs),
             headers: {
               "User-Agent":
                 "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
@@ -150,16 +166,27 @@ export async function fetchPublicPage(
           if (mobileRes.ok) {
             response = mobileRes;
             currentUrl = mobileUrl;
-            break;
+          } else {
+            currentUrl = next;
+            redirectCount++;
+            continue;
           }
-        } catch {
-          void 0;
+        } catch (error: unknown) {
+          if (
+            error instanceof Error &&
+            (error.name === "AbortError" || error.name === "TimeoutError")
+          ) {
+            throw new TimeoutError(currentUrl);
+          }
+          currentUrl = next;
+          redirectCount++;
+          continue;
         }
+      } else {
+        currentUrl = next;
+        redirectCount++;
+        continue;
       }
-
-      currentUrl = next;
-      redirectCount++;
-      continue;
     }
 
     if (response.status === 429) throw new RateLimitedError();
@@ -173,6 +200,12 @@ export async function fetchPublicPage(
     }
     if (!response.ok) {
       throw new NetworkError(`HTTP ${response.status}: ${currentUrl}`);
+    }
+
+    const declaredSize = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declaredSize) && declaredSize > MAX_RESPONSE_BYTES) {
+      await response.body?.cancel();
+      throw new NetworkError("Facebook response exceeds 5 MiB limit");
     }
 
     const reader = response.body?.getReader();
@@ -189,8 +222,8 @@ export async function fetchPublicPage(
       if (value) {
         total += value.byteLength;
         if (total > MAX_RESPONSE_BYTES) {
-          reader.cancel().catch(() => undefined);
-          break;
+          await reader.cancel();
+          throw new NetworkError("Facebook response exceeds 5 MiB limit");
         }
         chunks.push(value);
       }
@@ -217,6 +250,7 @@ export interface ImageFetchResult {
 }
 
 const MAX_IMAGE_BYTES = 512 * 1024;
+const DEFAULT_DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -230,19 +264,12 @@ export async function fetchImageDimensions(
 ): Promise<ImageFetchResult | null> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  if (!isSafeRedirectUrl(url)) return null;
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  if (!isSafeFacebookCdnUrl(url)) return null;
 
   try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: { "User-Agent": USER_AGENT },
-    });
-    clearTimeout(timer);
+    const response = await fetchSafeImage(url, timeoutMs);
 
-    if (!response.ok) return null;
+    if (!response) return null;
 
     const contentType = response.headers.get("content-type") ?? "";
     const mimeBase = contentType.split(";")[0]?.trim() ?? "";
@@ -258,11 +285,17 @@ export async function fetchImageDimensions(
       if (done) break;
       if (value) {
         total += value.byteLength;
-        chunks.push(value);
         if (total >= MAX_IMAGE_BYTES) {
-          reader.cancel().catch(() => undefined);
+          const allowed = Math.max(
+            0,
+            value.byteLength - (total - MAX_IMAGE_BYTES),
+          );
+          if (allowed > 0) chunks.push(value.subarray(0, allowed));
+          total = MAX_IMAGE_BYTES;
+          await reader.cancel();
           break;
         }
+        chunks.push(value);
       }
     }
 
@@ -277,9 +310,116 @@ export async function fetchImageDimensions(
     if (!dims) return null;
     return { ...dims, contentType: mimeBase };
   } catch {
-    clearTimeout(timer);
     return null;
   }
+}
+
+async function fetchSafeImage(
+  url: string,
+  timeoutMs: number,
+): Promise<Response | null> {
+  let currentUrl = url;
+  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
+    if (!isSafeFacebookCdnUrl(currentUrl)) return null;
+    const response = await fetch(currentUrl, {
+      signal: timeoutSignal(timeoutMs),
+      headers: {
+        "User-Agent": USER_AGENT,
+        Referer: "https://www.facebook.com/",
+      },
+      redirect: "manual",
+    });
+    if (response.status >= 301 && response.status <= 308) {
+      const location = response.headers.get("location");
+      if (!location) return null;
+      currentUrl = new URL(location, currentUrl).toString();
+      continue;
+    }
+    return response.ok ? response : null;
+  }
+  return null;
+}
+
+export interface DownloadImageOptions extends FetchPublicPageOptions {
+  maxBytes?: number | undefined;
+}
+
+export interface DownloadedImage {
+  data: Uint8Array;
+  contentType: string;
+  width: number | null;
+  height: number | null;
+}
+
+export async function downloadFacebookImage(
+  url: string,
+  options: DownloadImageOptions = {},
+): Promise<DownloadedImage> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const maxBytes = options.maxBytes ?? DEFAULT_DOWNLOAD_LIMIT_BYTES;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+    throw new NetworkError("Image byte limit must be a positive integer");
+  }
+
+  let response: Response | null;
+  try {
+    response = await fetchSafeImage(url, timeoutMs);
+  } catch (error: unknown) {
+    if (
+      error instanceof Error &&
+      (error.name === "AbortError" || error.name === "TimeoutError")
+    ) {
+      throw new TimeoutError(url);
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw new NetworkError(`Image download failed: ${message}`);
+  }
+  if (!response) throw new NetworkError("Image download failed");
+
+  const contentType = (response.headers.get("content-type") ?? "")
+    .split(";", 1)[0]!
+    .trim()
+    .toLowerCase();
+  if (!ALLOWED_MIME_TYPES.has(contentType)) {
+    await response.body?.cancel();
+    throw new NetworkError(`Unsupported image content type: ${contentType}`);
+  }
+
+  const declaredSize = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredSize) && declaredSize > maxBytes) {
+    await response.body?.cancel();
+    throw new NetworkError(`Image exceeds ${maxBytes} byte limit`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new NetworkError("Image response has no body");
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new NetworkError(`Image exceeds ${maxBytes} byte limit`);
+    }
+    chunks.push(value);
+  }
+
+  const data = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    data.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const dimensions = parseImageDimensions(data, contentType);
+  return {
+    data,
+    contentType,
+    width: dimensions?.width ?? null,
+    height: dimensions?.height ?? null,
+  };
 }
 
 function parseImageDimensions(
@@ -289,11 +429,15 @@ function parseImageDimensions(
   if (mime === "image/jpeg") return parseJpegDimensions(buf);
   if (mime === "image/png") return parsePngDimensions(buf);
   if (mime === "image/webp") return parseWebpDimensions(buf);
+  if (mime === "image/gif") return parseGifDimensions(buf);
   return null;
 }
 
 function readUint16BE(buf: Uint8Array, offset: number): number {
   return ((buf[offset] ?? 0) << 8) | (buf[offset + 1] ?? 0);
+}
+function readUint16LE(buf: Uint8Array, offset: number): number {
+  return (buf[offset] ?? 0) | ((buf[offset + 1] ?? 0) << 8);
 }
 function readUint32BE(buf: Uint8Array, offset: number): number {
   return (
@@ -325,8 +469,15 @@ function parseJpegDimensions(
   if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return null;
   let i = 2;
   while (i < buf.length - 8) {
-    if (buf[i] !== 0xff) return null;
+    if (buf[i] !== 0xff) {
+      i++;
+      continue;
+    }
     const marker = buf[i + 1] ?? 0;
+    if (marker === 0xff || marker === 0x00) {
+      i++;
+      continue;
+    }
     if (
       (marker >= 0xc0 && marker <= 0xc3) ||
       (marker >= 0xc5 && marker <= 0xc7) ||
@@ -339,6 +490,7 @@ function parseJpegDimensions(
       return { width, height };
     }
     const len = readUint16BE(buf, i + 2);
+    if (len < 2) return null;
     i += 2 + len;
   }
   return null;
@@ -357,6 +509,23 @@ function parseWebpDimensions(
     buf[11] !== 0x50
   )
     return null;
+  if (
+    buf[12] === 0x56 &&
+    buf[13] === 0x50 &&
+    buf[14] === 0x38 &&
+    buf[15] === 0x58
+  ) {
+    if (buf.length < 30) return null;
+    const width =
+      (buf[24] ?? 0) |
+      ((buf[25] ?? 0) << 8) |
+      ((buf[26] ?? 0) << 16);
+    const height =
+      (buf[27] ?? 0) |
+      ((buf[28] ?? 0) << 8) |
+      ((buf[29] ?? 0) << 16);
+    return { width: width + 1, height: height + 1 };
+  }
   if (
     buf[12] === 0x56 &&
     buf[13] === 0x50 &&
@@ -380,10 +549,21 @@ function parseWebpDimensions(
     buf[15] === 0x20
   ) {
     if (buf.length < 30) return null;
-    const width = readUint16BE(buf, 26) & 0x3fff;
-    const height = readUint16BE(buf, 28) & 0x3fff;
+    const width = readUint16LE(buf, 26) & 0x3fff;
+    const height = readUint16LE(buf, 28) & 0x3fff;
     if (width === 0 || height === 0) return null;
     return { width, height };
   }
   return null;
+}
+
+function parseGifDimensions(
+  buf: Uint8Array,
+): { width: number; height: number } | null {
+  if (buf.length < 10) return null;
+  const signature = String.fromCharCode(...buf.subarray(0, 6));
+  if (signature !== "GIF87a" && signature !== "GIF89a") return null;
+  const width = readUint16LE(buf, 6);
+  const height = readUint16LE(buf, 8);
+  return width > 0 && height > 0 ? { width, height } : null;
 }

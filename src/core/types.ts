@@ -26,6 +26,16 @@ export interface GetProfilePictureOptions {
   verifyImages?: boolean | undefined;
 }
 
+export interface GetProfilePictureImageOptions
+  extends GetProfilePictureOptions {
+  maxBytes?: number | undefined;
+}
+
+export interface ProfileImageDownloadResult extends ProfileImageResult {
+  data: Uint8Array;
+  contentType: string;
+}
+
 export interface ErrorResult {
   error: string;
   code: string;

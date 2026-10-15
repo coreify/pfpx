@@ -1,8 +1,17 @@
-export { getProfilePicture } from "./commands/get.js";
+export {
+  getProfilePicture,
+  getProfilePictureImage,
+} from "./commands/get.js";
 export {
   normalizeProfileUrl,
+  normalizeProfileInput,
   isFacebookHost,
 } from "./core/normalize-profile-url.js";
+export { downloadFacebookImage } from "./core/fetch-public-page.js";
+export type {
+  DownloadedImage,
+  DownloadImageOptions,
+} from "./core/fetch-public-page.js";
 export {
   PfpxError,
   InvalidUrlError,
@@ -16,6 +25,8 @@ export {
 export type {
   ProfileImageResult,
   GetProfilePictureOptions,
+  GetProfilePictureImageOptions,
+  ProfileImageDownloadResult,
   ImageCandidate,
   ImageSource,
 } from "./core/types.js";

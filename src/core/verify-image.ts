@@ -9,29 +9,24 @@ export async function verifyCandidates(
   candidates: ImageCandidate[],
   options: FetchPublicPageOptions = {},
 ): Promise<ImageCandidate[]> {
-  const verified: ImageCandidate[] = [];
   const toVerify = candidates.slice(0, MAX_VERIFY_CANDIDATES);
-
-  await Promise.all(
-    toVerify.map(async (candidate) => {
+  const verified = await Promise.all(
+    toVerify.map(async (candidate): Promise<ImageCandidate> => {
       if (!isSafeFacebookCdnUrl(candidate.url)) {
-        verified.push(candidate);
-        return;
+        return candidate;
       }
       const dims = await fetchImageDimensions(candidate.url, options);
       if (dims) {
-        verified.push({
+        return {
           ...candidate,
           width: dims.width,
           height: dims.height,
           verified: true,
-        });
-      } else {
-        verified.push(candidate);
+        };
       }
+      return candidate;
     }),
   );
 
-  const urlToVerified = new Map(verified.map((c) => [c.url, c]));
-  return toVerify.map((c) => urlToVerified.get(c.url) ?? c);
+  return [...verified, ...candidates.slice(MAX_VERIFY_CANDIDATES)];
 }

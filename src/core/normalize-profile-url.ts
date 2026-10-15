@@ -16,11 +16,14 @@ const ALLOWED_FACEBOOK_HOSTS = new Set([
 
 const PRIVATE_IP_PATTERNS = [
   /^localhost$/i,
+  /^0\./,
   /^127\./,
   /^10\./,
+  /^169\.254\./,
   /^172\.(1[6-9]|2\d|3[01])\./,
   /^192\.168\./,
   /^::1$/,
+  /^fe[89ab][0-9a-f]:/i,
   /^fc00:/i,
   /^fd[0-9a-f]{2}:/i,
 ];
@@ -81,6 +84,9 @@ export function normalizeProfileUrl(raw: string): string {
   }
 
   url.protocol = "https:";
+  url.username = "";
+  url.password = "";
+  url.port = "";
   url.hash = "";
 
   if (
@@ -100,7 +106,11 @@ export function normalizeProfileUrl(raw: string): string {
   }
 
   const idParam = url.searchParams.get("id");
-  if (idParam && /^\d+$/.test(idParam)) {
+  if (
+    url.pathname.replace(/\/+$/, "").toLowerCase() === "/profile.php" &&
+    idParam &&
+    /^\d+$/.test(idParam)
+  ) {
     return `https://www.facebook.com/profile.php?id=${idParam}`;
   }
 
@@ -197,6 +207,26 @@ export function normalizeProfileUrl(raw: string): string {
   }
 
   return url.toString();
+}
+
+const FACEBOOK_URL_IN_TEXT =
+  /(?:https?:\/\/)?(?:[a-z0-9-]+\.)?(?:facebook\.com|fb\.com)\/[^\s<>"']+/i;
+const FACEBOOK_USERNAME = /^@?([a-zA-Z0-9.]{3,50})$/;
+
+export function normalizeProfileInput(raw: string): string {
+  const input = raw.trim();
+  const username = input.match(FACEBOOK_USERNAME)?.[1];
+  if (username) {
+    return `https://www.facebook.com/${username}`;
+  }
+
+  const matchedUrl = input.match(FACEBOOK_URL_IN_TEXT)?.[0];
+  if (matchedUrl) {
+    const withoutTrailingPunctuation = matchedUrl.replace(/[),.;!?]+$/, "");
+    return normalizeProfileUrl(withoutTrailingPunctuation);
+  }
+
+  return normalizeProfileUrl(input);
 }
 
 export function isSafeFacebookCdnUrl(raw: string): boolean {

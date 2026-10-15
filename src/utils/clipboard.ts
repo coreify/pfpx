@@ -1,28 +1,33 @@
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
+import { execFile } from "node:child_process";
 
-const execAsync = promisify(exec);
+async function pipeTo(command: string, args: string[], text: string) {
+  const child = execFile(command, args);
+  child.stdin?.end(text);
+  await new Promise<void>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} exited with code ${String(code)}`));
+    });
+  });
+}
 
 export async function copyToClipboard(text: string): Promise<boolean> {
   const platform = process.platform;
   try {
     if (platform === "darwin") {
-      await execAsync(`echo ${JSON.stringify(text)} | pbcopy`);
+      await pipeTo("pbcopy", [], text);
       return true;
     }
     if (platform === "win32") {
-      await execAsync(`echo ${text.replace(/\n/g, "")} | clip`);
+      await pipeTo("clip", [], text.replace(/\n/g, ""));
       return true;
     }
     try {
-      await execAsync(
-        `echo ${JSON.stringify(text)} | xclip -selection clipboard`,
-      );
+      await pipeTo("xclip", ["-selection", "clipboard"], text);
       return true;
     } catch {
-      await execAsync(
-        `echo ${JSON.stringify(text)} | xsel --clipboard --input`,
-      );
+      await pipeTo("xsel", ["--clipboard", "--input"], text);
       return true;
     }
   } catch {

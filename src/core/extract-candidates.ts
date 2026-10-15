@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import type { CheerioAPI } from "cheerio";
 import type { ImageCandidate } from "./types.js";
 import { isSafeFacebookCdnUrl } from "./normalize-profile-url.js";
 
@@ -67,15 +68,13 @@ function isLikelyProfilePicture(url: string): boolean {
   return true;
 }
 
-function extractOgImage(html: string): ImageCandidate[] {
-  const $ = cheerio.load(html);
+function extractOgImage($: CheerioAPI): ImageCandidate[] {
   const content = $('meta[property="og:image"]').attr("content");
   if (!content) return [];
   return createCandidatePair(content, "og:image");
 }
 
-function extractTwitterImage(html: string): ImageCandidate[] {
-  const $ = cheerio.load(html);
+function extractTwitterImage($: CheerioAPI): ImageCandidate[] {
   const content =
     $('meta[name="twitter:image"]').attr("content") ??
     $('meta[name="twitter:image:src"]').attr("content");
@@ -83,18 +82,18 @@ function extractTwitterImage(html: string): ImageCandidate[] {
   return createCandidatePair(content, "twitter:image");
 }
 
-function extractStructuredData(html: string): ImageCandidate[] {
-  const $ = cheerio.load(html);
+function extractStructuredData($: CheerioAPI): ImageCandidate[] {
   const candidates: ImageCandidate[] = [];
 
   $('script[type="application/ld+json"]').each((_, el) => {
     const text = $(el).html() ?? "";
     try {
       const data: unknown = JSON.parse(text);
-      const extractImage = (obj: unknown): void => {
+      const extractImage = (obj: unknown, depth = 0): void => {
+        if (depth > 20) return;
         if (!obj || typeof obj !== "object") return;
         if (Array.isArray(obj)) {
-          obj.forEach(extractImage);
+          for (const item of obj) extractImage(item, depth + 1);
           return;
         }
         const rec = obj as Record<string, unknown>;
@@ -107,14 +106,26 @@ function extractStructuredData(html: string): ImageCandidate[] {
             ...createCandidatePair(imageField, "structured-data"),
           );
         } else if (imageField && typeof imageField === "object") {
-          const imgObj = imageField as Record<string, unknown>;
-          const imgUrl = imgObj["url"];
-          if (typeof imgUrl === "string") {
-            candidates.push(...createCandidatePair(imgUrl, "structured-data"));
+          if (Array.isArray(imageField)) {
+            for (const image of imageField) {
+              if (typeof image === "string") {
+                candidates.push(
+                  ...createCandidatePair(image, "structured-data"),
+                );
+              }
+            }
+          } else {
+            const imgObj = imageField as Record<string, unknown>;
+            const imgUrl = imgObj["url"];
+            if (typeof imgUrl === "string") {
+              candidates.push(
+                ...createCandidatePair(imgUrl, "structured-data"),
+              );
+            }
           }
         }
         for (const val of Object.values(rec)) {
-          if (val && typeof val === "object") extractImage(val);
+          if (val && typeof val === "object") extractImage(val, depth + 1);
         }
       };
       extractImage(data);
@@ -127,10 +138,10 @@ function extractStructuredData(html: string): ImageCandidate[] {
 }
 
 function extractPublicHtmlImages(
+  $: CheerioAPI,
   html: string,
   profileUrl: string,
 ): ImageCandidate[] {
-  const $ = cheerio.load(html);
   const candidates: ImageCandidate[] = [];
 
   const profileId = profileUrl.match(/profile\.php\?id=(\d+)/)?.[1];
@@ -180,28 +191,29 @@ export function extractCandidates(
 ): ImageCandidate[] {
   const all: ImageCandidate[] = [];
   const verbose = options.verbose ?? false;
+  const $ = cheerio.load(html);
 
-  const ogList = extractOgImage(html);
+  const ogList = extractOgImage($);
   for (const og of ogList) {
     all.push(og);
     if (verbose) process.stderr.write(`[pfpx] Found og:image: ${og.url}\n`);
   }
 
-  const twList = extractTwitterImage(html);
+  const twList = extractTwitterImage($);
   for (const tw of twList) {
     all.push(tw);
     if (verbose)
       process.stderr.write(`[pfpx] Found twitter:image: ${tw.url}\n`);
   }
 
-  const structured = extractStructuredData(html);
+  const structured = extractStructuredData($);
   for (const c of structured) {
     all.push(c);
     if (verbose)
       process.stderr.write(`[pfpx] Found structured-data image: ${c.url}\n`);
   }
 
-  const htmlImages = extractPublicHtmlImages(html, profileUrl);
+  const htmlImages = extractPublicHtmlImages($, html, profileUrl);
   for (const c of htmlImages) {
     all.push(c);
     if (verbose)

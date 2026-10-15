@@ -13,18 +13,32 @@ import type { ProfileImageResult } from "../src/core/types.js";
 // Mock child_process for openInBrowser & copyToClipboard
 vi.mock("node:child_process", () => {
   return {
-    exec: vi.fn(
+    execFile: vi.fn(
       (
         _cmd: string,
+        _args: string[],
         callback?: (err: Error | null, stdout: string, stderr: string) => void,
       ) => {
         if (typeof callback === "function") {
-          if (_cmd.includes("fail-test")) {
-            callback(new Error("Command failed"), "", "");
-          } else {
-            callback(null, "", "");
-          }
+          queueMicrotask(() => callback(null, "", ""));
         }
+        const listeners = new Map<string, (value: unknown) => void>();
+        return {
+          stdin: {
+            end(text: string) {
+              queueMicrotask(() => {
+                if (text.includes("fail-test")) {
+                  listeners.get("error")?.(new Error("Command failed"));
+                } else {
+                  listeners.get("close")?.(0);
+                }
+              });
+            },
+          },
+          once(event: string, listener: (value: unknown) => void) {
+            listeners.set(event, listener);
+          },
+        };
       },
     ),
   };
@@ -163,9 +177,9 @@ describe("printError", () => {
 });
 
 describe("openInBrowser & copyToClipboard", () => {
-  it("openInBrowser invokes exec", async () => {
+  it("openInBrowser invokes execFile", async () => {
     await openInBrowser("https://example.com");
-    expect(childProcess.exec).toHaveBeenCalled();
+    expect(childProcess.execFile).toHaveBeenCalled();
   });
 
   it("copyToClipboard returns true on successful exec", async () => {

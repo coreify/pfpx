@@ -1,5 +1,8 @@
-import { normalizeProfileUrl } from "../core/normalize-profile-url.js";
-import { fetchPublicPage } from "../core/fetch-public-page.js";
+import { normalizeProfileInput } from "../core/normalize-profile-url.js";
+import {
+  downloadFacebookImage,
+  fetchPublicPage,
+} from "../core/fetch-public-page.js";
 import { extractCandidates } from "../core/extract-candidates.js";
 import { verifyCandidates } from "../core/verify-image.js";
 import { selectBest } from "../core/select-best.js";
@@ -7,11 +10,15 @@ import { NoImageFoundError, NetworkError } from "../utils/errors.js";
 import type {
   ProfileImageResult,
   GetProfilePictureOptions,
+  GetProfilePictureImageOptions,
+  ProfileImageDownloadResult,
 } from "../core/types.js";
 
 export type {
   ProfileImageResult,
   GetProfilePictureOptions,
+  GetProfilePictureImageOptions,
+  ProfileImageDownloadResult,
 } from "../core/types.js";
 
 function detectLoginWall(html: string): boolean {
@@ -31,7 +38,7 @@ export async function getProfilePicture(
   rawUrl: string,
   options: GetProfilePictureOptions = {},
 ): Promise<ProfileImageResult> {
-  const profileUrl = normalizeProfileUrl(rawUrl);
+  const profileUrl = normalizeProfileInput(rawUrl);
   const { timeoutMs, verbose, verifyImages = true } = options;
 
   const fetchOptions = { timeoutMs, verbose };
@@ -92,4 +99,45 @@ export async function getProfilePicture(
     candidates,
     warning: warnings.join(" "),
   };
+}
+
+export async function getProfilePictureImage(
+  rawInput: string,
+  options: GetProfilePictureImageOptions = {},
+): Promise<ProfileImageDownloadResult> {
+  const result = await getProfilePicture(rawInput, {
+    timeoutMs: options.timeoutMs,
+    verbose: options.verbose,
+    verifyImages: false,
+  });
+
+  const remaining = [...(result.candidates ?? [])];
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5 && remaining.length > 0; attempt++) {
+    const candidate = selectBest(remaining);
+    if (!candidate) break;
+    try {
+      const image = await downloadFacebookImage(candidate.url, {
+        timeoutMs: options.timeoutMs,
+        verbose: options.verbose,
+        maxBytes: options.maxBytes,
+      });
+      return {
+        ...result,
+        imageUrl: candidate.url,
+        width: image.width,
+        height: image.height,
+        source: candidate.source,
+        data: image.data,
+        contentType: image.contentType,
+      };
+    } catch (error: unknown) {
+      lastError = error;
+      const index = remaining.indexOf(candidate);
+      if (index >= 0) remaining.splice(index, 1);
+    }
+  }
+
+  if (lastError instanceof Error) throw lastError;
+  throw new NoImageFoundError("No downloadable profile picture found.");
 }
