@@ -1,9 +1,9 @@
 # @coreify/pfpx
 
-Retrieve the highest-resolution publicly accessible Facebook profile picture (up to 2048×2048) from CLI or Node.js.
+Extract highest-resolution public Facebook profile pictures (up to 2048×2048).
 
 [![npm](https://img.shields.io/npm/v/@coreify/pfpx)](https://www.npmjs.com/package/@coreify/pfpx)
-[![license](https://img.shields.io/npm/l/@coreify/pfpx)](./LICENSE)
+[![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
 ## Install
 
