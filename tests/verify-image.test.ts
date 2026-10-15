@@ -82,6 +82,16 @@ function createWebpVP8Bytes(width: number, height: number): Uint8Array {
   return buf;
 }
 
+function createGifBytes(width: number, height: number): Uint8Array {
+  const buf = new Uint8Array(10);
+  buf.set(new TextEncoder().encode("GIF89a"));
+  buf[6] = width & 0xff;
+  buf[7] = (width >> 8) & 0xff;
+  buf[8] = height & 0xff;
+  buf[9] = (height >> 8) & 0xff;
+  return buf;
+}
+
 function makeStreamResponse(
   bytes: Uint8Array,
   contentType: string,
@@ -142,6 +152,17 @@ describe("fetchImageDimensions", () => {
 
     const res = await fetchImageDimensions(CDN_URL);
     expect(res).toEqual({ width: 500, height: 500, contentType: "image/webp" });
+  });
+
+  it("parses GIF dimensions", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeStreamResponse(createGifBytes(320, 200), "image/gif"),
+    );
+    await expect(fetchImageDimensions(CDN_URL)).resolves.toEqual({
+      width: 320,
+      height: 200,
+      contentType: "image/gif",
+    });
   });
 
   it("returns null for non-safe redirect URL", async () => {
@@ -218,5 +239,19 @@ describe("verifyCandidates", () => {
     const verified = await verifyCandidates(candidates);
     expect(verified[0]!.verified).toBe(false);
     expect(verified[0]!.width).toBeUndefined();
+  });
+
+  it("preserves candidates beyond verification limit", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 500 }));
+    const candidates: ImageCandidate[] = Array.from({ length: 7 }, (_, i) => ({
+      url: `${CDN_URL}&candidate=${i}`,
+      source: "public-html",
+      verified: false,
+    }));
+    const verified = await verifyCandidates(candidates);
+    expect(verified).toHaveLength(7);
+    expect(verified.map((candidate) => candidate.url)).toEqual(
+      candidates.map((candidate) => candidate.url),
+    );
   });
 });

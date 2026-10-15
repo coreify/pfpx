@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getProfilePicture } from "../src/commands/get.js";
+import {
+  getProfilePicture,
+  getProfilePictureImage,
+} from "../src/commands/get.js";
 import { NoImageFoundError } from "../src/utils/errors.js";
 
 const CDN = "https://scontent.xx.fbcdn.net/v/t1.6435-1";
@@ -138,5 +141,32 @@ describe("getProfilePicture", () => {
     expect(result.width).toBe(400);
     expect(result.height).toBe(400);
     expect(result.candidates?.[0]?.verified).toBe(true);
+  });
+});
+
+describe("getProfilePictureImage", () => {
+  beforeEach(() => {
+    vi.mocked(fetch).mockReset();
+  });
+
+  it("accepts username input and returns downloaded bytes", async () => {
+    const jpegBytes = new Uint8Array([
+      0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x01, 0x90, 0x01, 0x90,
+    ]);
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(makeResponseStream(makeHtmlWithOg(PROFILE_IMAGE)))
+      .mockResolvedValueOnce(
+        new Response(jpegBytes, {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+        }),
+      );
+
+    const result = await getProfilePictureImage("testuser");
+    expect(result.profileUrl).toBe("https://www.facebook.com/testuser");
+    expect(result.data).toEqual(jpegBytes);
+    expect(result.width).toBe(400);
+    expect(result.height).toBe(400);
+    expect(result.contentType).toBe("image/jpeg");
   });
 });

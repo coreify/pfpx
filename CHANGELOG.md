@@ -1,6 +1,26 @@
 # Changelog
 
-## [1.0.0] - 2024-10-15
+## [1.1.0] - 2026-10-15
+
+### Added
+
+- `getProfilePictureImage()` for validated profile lookup and bounded image download
+- Bare username and Facebook URL-in-text input support
+- GIF and extended WebP dimension parsing
+
+### Fixed
+
+- Mobile fallback redirect incorrectly ending as a redirect-loop error
+- Candidate verification dropping every candidate after the first five
+- WebP VP8 byte order, unsafe cross-origin redirects, and oversized response handling
+- Shell injection risks in browser and clipboard helpers
+
+### Changed
+
+- HTML extraction parses each document once
+- Image downloads validate redirects, MIME type, timeout, and size limits
+
+## [1.0.0] - 2026-10-15
 
 ### Added
 

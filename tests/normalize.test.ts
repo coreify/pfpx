@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizeProfileUrl,
+  normalizeProfileInput,
   isFacebookHost,
   isAllowedProfileHost,
   isSafeFacebookCdnUrl,
@@ -109,6 +110,10 @@ describe("normalizeProfileUrl", () => {
     ).toThrow(UnsupportedUrlError);
 
     expect(() =>
+      normalizeProfileUrl("https://www.facebook.com/photo.php?id=12345"),
+    ).toThrow(UnsupportedUrlError);
+
+    expect(() =>
       normalizeProfileUrl("https://www.facebook.com/events/12345"),
     ).toThrow(UnsupportedUrlError);
 
@@ -149,6 +154,28 @@ describe("normalizeProfileUrl", () => {
     expect(() => normalizeProfileUrl("https://192.168.1.1/user")).toThrow(
       InvalidUrlError,
     );
+  });
+});
+
+describe("normalizeProfileInput", () => {
+  it("accepts a bare username", () => {
+    expect(normalizeProfileInput("@zuck")).toBe(
+      "https://www.facebook.com/zuck",
+    );
+  });
+
+  it("extracts a Facebook URL from surrounding text", () => {
+    expect(
+      normalizeProfileInput(
+        "Please fetch https://m.facebook.com/zuck/photos, thanks",
+      ),
+    ).toBe("https://www.facebook.com/zuck");
+  });
+
+  it("removes credentials and custom ports", () => {
+    expect(
+      normalizeProfileInput("https://user:pass@facebook.com:8443/zuck"),
+    ).toBe("https://www.facebook.com/zuck");
   });
 });
 

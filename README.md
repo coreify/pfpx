@@ -33,11 +33,18 @@ pfpx https://www.facebook.com/zuck
 ## API
 
 ```typescript
-import { getProfilePicture } from "@coreify/pfpx";
+import { getProfilePicture, getProfilePictureImage } from "@coreify/pfpx";
 
 const result = await getProfilePicture("https://www.facebook.com/zuck");
 console.log(result.imageUrl); // 2048x2048 uncropped CDN link
 console.log(result.width, result.height); // 2048, 2048
+
+// Accepts a username, URL, or URL embedded in text. Downloads with timeout,
+// redirect, content-type, and byte-limit validation.
+const image = await getProfilePictureImage("zuck", {
+  maxBytes: 20 * 1024 * 1024,
+});
+console.log(image.data, image.contentType);
 ```
 
 ## Notes

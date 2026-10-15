@@ -63,6 +63,35 @@ describe("fetchPublicPage", () => {
     ).rejects.toThrow(NetworkError);
   });
 
+  it("rejects redirects outside Facebook", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeRedirect(302, "https://example.com/not-facebook"),
+    );
+    await expect(
+      fetchPublicPage("https://www.facebook.com/user"),
+    ).rejects.toThrow(NetworkError);
+  });
+
+  it("returns mobile page when desktop redirects to login", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        makeRedirect(302, "https://www.facebook.com/login/?next=user"),
+      )
+      .mockResolvedValueOnce(makeResponse(200, "<html>mobile</html>"));
+    const result = await fetchPublicPage("https://www.facebook.com/user");
+    expect(result.html).toContain("mobile");
+    expect(result.finalUrl).toBe("https://m.facebook.com/user");
+  });
+
+  it("rejects oversized page declared by content-length", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponse(200, "small", { "content-length": "6000000" }),
+    );
+    await expect(
+      fetchPublicPage("https://www.facebook.com/user"),
+    ).rejects.toThrow("exceeds 5 MiB");
+  });
+
   it("throws RateLimitedError on 429", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(makeResponse(429, "Rate limited"));
     await expect(
