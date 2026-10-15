@@ -1,7 +1,4 @@
-export {
-  getProfilePicture,
-  getProfilePictureImage,
-} from "./commands/get.js";
+export { getProfilePicture, getProfilePictureImage } from "./commands/get.js";
 export {
   normalizeProfileUrl,
   normalizeProfileInput,

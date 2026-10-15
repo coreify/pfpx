@@ -26,8 +26,7 @@ export interface GetProfilePictureOptions {
   verifyImages?: boolean | undefined;
 }
 
-export interface GetProfilePictureImageOptions
-  extends GetProfilePictureOptions {
+export interface GetProfilePictureImageOptions extends GetProfilePictureOptions {
   maxBytes?: number | undefined;
 }
 

@@ -517,13 +517,9 @@ function parseWebpDimensions(
   ) {
     if (buf.length < 30) return null;
     const width =
-      (buf[24] ?? 0) |
-      ((buf[25] ?? 0) << 8) |
-      ((buf[26] ?? 0) << 16);
+      (buf[24] ?? 0) | ((buf[25] ?? 0) << 8) | ((buf[26] ?? 0) << 16);
     const height =
-      (buf[27] ?? 0) |
-      ((buf[28] ?? 0) << 8) |
-      ((buf[29] ?? 0) << 16);
+      (buf[27] ?? 0) | ((buf[28] ?? 0) << 8) | ((buf[29] ?? 0) << 16);
     return { width: width + 1, height: height + 1 };
   }
   if (

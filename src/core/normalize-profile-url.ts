@@ -136,42 +136,104 @@ export function normalizeProfileUrl(raw: string): string {
   const second = (segments[1] || "").toLowerCase();
 
   if (first === "share") {
-    if (second === "p") throw new UnsupportedUrlError(raw, "post", "This link is a Facebook post, not a profile.");
-    if (second === "r") throw new UnsupportedUrlError(raw, "reel", "This link is a Facebook reel, not a profile.");
-    if (second === "v") throw new UnsupportedUrlError(raw, "video", "This link is a Facebook video, not a profile.");
-    throw new UnsupportedUrlError(raw, "share", "This link is a generic Facebook share link.");
+    if (second === "p")
+      throw new UnsupportedUrlError(
+        raw,
+        "post",
+        "This link is a Facebook post, not a profile.",
+      );
+    if (second === "r")
+      throw new UnsupportedUrlError(
+        raw,
+        "reel",
+        "This link is a Facebook reel, not a profile.",
+      );
+    if (second === "v")
+      throw new UnsupportedUrlError(
+        raw,
+        "video",
+        "This link is a Facebook video, not a profile.",
+      );
+    throw new UnsupportedUrlError(
+      raw,
+      "share",
+      "This link is a generic Facebook share link.",
+    );
   }
 
-  if (first === "posts" || first === "story.php" || first === "permalink.php" || second === "posts" || second === "activity") {
-    throw new UnsupportedUrlError(raw, "post", "This link is a Facebook post, not a profile.");
+  if (
+    first === "posts" ||
+    first === "story.php" ||
+    first === "permalink.php" ||
+    second === "posts" ||
+    second === "activity"
+  ) {
+    throw new UnsupportedUrlError(
+      raw,
+      "post",
+      "This link is a Facebook post, not a profile.",
+    );
   }
 
   if (first === "photo.php" || first === "photo") {
-    throw new UnsupportedUrlError(raw, "photo", "This link is a Facebook photo, not a profile.");
+    throw new UnsupportedUrlError(
+      raw,
+      "photo",
+      "This link is a Facebook photo, not a profile.",
+    );
   }
 
-  if (first === "watch" || first === "reel" || first === "reels" || (segments.length >= 3 && second === "videos")) {
-    throw new UnsupportedUrlError(raw, "video", "This link is a Facebook video or reel, not a profile.");
+  if (
+    first === "watch" ||
+    first === "reel" ||
+    first === "reels" ||
+    (segments.length >= 3 && second === "videos")
+  ) {
+    throw new UnsupportedUrlError(
+      raw,
+      "video",
+      "This link is a Facebook video or reel, not a profile.",
+    );
   }
 
   if (first === "groups" || first === "group") {
-    throw new UnsupportedUrlError(raw, "group", "This link is a Facebook group, not a profile.");
+    throw new UnsupportedUrlError(
+      raw,
+      "group",
+      "This link is a Facebook group, not a profile.",
+    );
   }
 
   if (first === "events" || first === "event") {
-    throw new UnsupportedUrlError(raw, "event", "This link is a Facebook event, not a profile.");
+    throw new UnsupportedUrlError(
+      raw,
+      "event",
+      "This link is a Facebook event, not a profile.",
+    );
   }
 
   if (first === "marketplace") {
-    throw new UnsupportedUrlError(raw, "marketplace", "This link is a Marketplace listing, not a profile.");
+    throw new UnsupportedUrlError(
+      raw,
+      "marketplace",
+      "This link is a Marketplace listing, not a profile.",
+    );
   }
 
   if (first === "gaming") {
-    throw new UnsupportedUrlError(raw, "gaming", "This link is a Facebook Gaming page, not a profile.");
+    throw new UnsupportedUrlError(
+      raw,
+      "gaming",
+      "This link is a Facebook Gaming page, not a profile.",
+    );
   }
 
   if (first === "fundraisers") {
-    throw new UnsupportedUrlError(raw, "fundraiser", "This link is a Facebook fundraiser, not a profile.");
+    throw new UnsupportedUrlError(
+      raw,
+      "fundraiser",
+      "This link is a Facebook fundraiser, not a profile.",
+    );
   }
 
   const sysPages = new Set([
@@ -191,10 +253,17 @@ export function normalizeProfileUrl(raw: string): string {
     "business",
   ]);
   if (sysPages.has(first)) {
-    throw new UnsupportedUrlError(raw, "navigation", `This is a Facebook ${first} page, not a profile.`);
+    throw new UnsupportedUrlError(
+      raw,
+      "navigation",
+      `This is a Facebook ${first} page, not a profile.`,
+    );
   }
 
-  if (segments.length >= 2 && (PROFILE_SUBTABS.has(second) || second.startsWith("about_"))) {
+  if (
+    segments.length >= 2 &&
+    (PROFILE_SUBTABS.has(second) || second.startsWith("about_"))
+  ) {
     return `https://www.facebook.com/${segments[0]}`;
   }
 

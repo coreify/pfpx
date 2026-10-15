@@ -5,8 +5,7 @@ function run(command: string, args: string[]): Promise<void> {
     execFile(command, args, (error) => {
       if (error) {
         reject(new Error("Failed to launch browser", { cause: error }));
-      }
-      else resolve();
+      } else resolve();
     });
   });
 }

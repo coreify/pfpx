@@ -66,4 +66,3 @@ export class UnsupportedUrlError extends PfpxError {
     this.name = "UnsupportedUrlError";
   }
 }
-

@@ -63,19 +63,25 @@ describe("normalizeProfileUrl", () => {
     const result = normalizeProfileUrl(
       "https://www.facebook.com/friends/suggestions/?profile_id=61567168861894",
     );
-    expect(result).toBe("https://www.facebook.com/profile.php?id=61567168861894");
+    expect(result).toBe(
+      "https://www.facebook.com/profile.php?id=61567168861894",
+    );
   });
 
   it("normalizes /people/name/id format", () => {
     const result = normalizeProfileUrl(
       "https://www.facebook.com/people/Jannatul-Ferdows/61567168861894/",
     );
-    expect(result).toBe("https://www.facebook.com/profile.php?id=61567168861894");
+    expect(result).toBe(
+      "https://www.facebook.com/profile.php?id=61567168861894",
+    );
   });
 
   it("normalizes /p/name-id and /p/id formats", () => {
     expect(
-      normalizeProfileUrl("https://www.facebook.com/p/Jannatul-Ferdows-61567168861894/"),
+      normalizeProfileUrl(
+        "https://www.facebook.com/p/Jannatul-Ferdows-61567168861894/",
+      ),
     ).toBe("https://www.facebook.com/profile.php?id=61567168861894");
 
     expect(
