@@ -33,11 +33,16 @@ pfpx https://www.facebook.com/zuck
 ## API
 
 ```typescript
-import { getProfilePicture, getProfilePictureImage } from "@coreify/pfpx";
+import {
+  getCoverPictureImage,
+  getProfilePicture,
+  getProfilePictureImage,
+} from "@coreify/pfpx";
 
 const result = await getProfilePicture("https://www.facebook.com/zuck");
 console.log(result.imageUrl); // 2048x2048 uncropped CDN link
 console.log(result.width, result.height); // 2048, 2048
+console.log(result.identifier); // username, or numeric profile ID
 
 // Accepts a username, URL, or URL embedded in text. Downloads with timeout,
 // redirect, content-type, and byte-limit validation.
@@ -45,12 +50,17 @@ const image = await getProfilePictureImage("zuck", {
   maxBytes: 20 * 1024 * 1024,
 });
 console.log(image.data, image.contentType);
+
+// Returns original public cover bytes only when they meet the high-quality floor.
+const cover = await getCoverPictureImage("zuck");
+console.log(cover.data, cover.width, cover.height);
 ```
 
 ## Notes
 
 - Operates only on publicly accessible profile data without credentials or cookies.
 - Facebook CDN URLs expire after a few days. Re-run if link expires.
+- Cover lookup is best-effort and rejects display-sized images below 1200 × 400.
 
 ## License
 

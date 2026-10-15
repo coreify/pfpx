@@ -1,7 +1,12 @@
-export { getProfilePicture, getProfilePictureImage } from "./commands/get.js";
+export {
+  getProfilePicture,
+  getProfilePictureImage,
+  getCoverPictureImage,
+} from "./commands/get.js";
 export {
   normalizeProfileUrl,
   normalizeProfileInput,
+  getProfileIdentifier,
   isFacebookHost,
 } from "./core/normalize-profile-url.js";
 export { downloadFacebookImage } from "./core/fetch-public-page.js";

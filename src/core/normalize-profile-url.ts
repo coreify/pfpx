@@ -298,6 +298,23 @@ export function normalizeProfileInput(raw: string): string {
   return normalizeProfileUrl(input);
 }
 
+export function getProfileIdentifier(profileUrl: string): string {
+  const url = new URL(profileUrl);
+  const username = url.pathname.split("/").filter(Boolean)[0];
+  if (
+    username?.toLowerCase() !== "profile.php" &&
+    username &&
+    /^[a-zA-Z0-9.]{3,50}$/.test(username)
+  ) {
+    return username;
+  }
+
+  const id = url.searchParams.get("id");
+  if (id && /^\d+$/.test(id)) return id;
+
+  return "facebook-profile";
+}
+
 export function isSafeFacebookCdnUrl(raw: string): boolean {
   let url: URL;
   try {

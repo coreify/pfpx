@@ -1,9 +1,15 @@
-import { normalizeProfileInput } from "../core/normalize-profile-url.js";
+import {
+  getProfileIdentifier,
+  normalizeProfileInput,
+} from "../core/normalize-profile-url.js";
 import {
   downloadFacebookImage,
   fetchPublicPage,
 } from "../core/fetch-public-page.js";
-import { extractCandidates } from "../core/extract-candidates.js";
+import {
+  extractCandidates,
+  extractCoverCandidates,
+} from "../core/extract-candidates.js";
 import { verifyCandidates } from "../core/verify-image.js";
 import { selectBest } from "../core/select-best.js";
 import { NoImageFoundError, NetworkError } from "../utils/errors.js";
@@ -13,6 +19,9 @@ import type {
   GetProfilePictureImageOptions,
   ProfileImageDownloadResult,
 } from "../core/types.js";
+
+const MIN_HIGH_QUALITY_COVER_WIDTH = 1_200;
+const MIN_HIGH_QUALITY_COVER_HEIGHT = 400;
 
 export type {
   ProfileImageResult,
@@ -92,6 +101,7 @@ export async function getProfilePicture(
   return {
     inputUrl: rawUrl,
     profileUrl: finalUrl,
+    identifier: getProfileIdentifier(finalUrl),
     imageUrl: best.url,
     width: best.width ?? null,
     height: best.height ?? null,
@@ -140,4 +150,62 @@ export async function getProfilePictureImage(
 
   if (lastError instanceof Error) throw lastError;
   throw new NoImageFoundError("No downloadable profile picture found.");
+}
+
+export async function getCoverPictureImage(
+  rawInput: string,
+  options: GetProfilePictureImageOptions = {},
+): Promise<ProfileImageDownloadResult> {
+  const profileUrl = normalizeProfileInput(rawInput);
+  const { html, finalUrl } = await fetchPublicPage(profileUrl, {
+    timeoutMs: options.timeoutMs,
+    verbose: options.verbose,
+  });
+
+  if (detectLoginWall(html)) {
+    throw new NoImageFoundError(
+      "Facebook returned a login page. The cover may require authentication to view.",
+    );
+  }
+
+  const candidates = extractCoverCandidates(html, {
+    verbose: options.verbose,
+  });
+  let lastError: unknown;
+  for (const candidate of candidates.slice(0, 5)) {
+    try {
+      const image = await downloadFacebookImage(candidate.url, {
+        timeoutMs: options.timeoutMs,
+        verbose: options.verbose,
+        maxBytes: options.maxBytes,
+      });
+      if (
+        image.width / image.height < 1.3 ||
+        image.width < MIN_HIGH_QUALITY_COVER_WIDTH ||
+        image.height < MIN_HIGH_QUALITY_COVER_HEIGHT
+      ) {
+        continue;
+      }
+
+      return {
+        inputUrl: rawInput,
+        profileUrl: finalUrl,
+        identifier: getProfileIdentifier(finalUrl),
+        imageUrl: candidate.url,
+        width: image.width,
+        height: image.height,
+        source: candidate.source,
+        candidates,
+        warning:
+          "Facebook CDN URLs expire. Fetch again if the URL stops working.",
+        data: image.data,
+        contentType: image.contentType,
+      };
+    } catch (error: unknown) {
+      lastError = error;
+    }
+  }
+
+  if (candidates.length > 0 && lastError instanceof Error) throw lastError;
+  throw new NoImageFoundError("No downloadable public cover picture found.");
 }

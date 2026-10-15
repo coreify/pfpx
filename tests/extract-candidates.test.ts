@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { extractCandidates } from "../src/core/extract-candidates.js";
+import {
+  extractCandidates,
+  extractCoverCandidates,
+} from "../src/core/extract-candidates.js";
 
 const CDN = "https://scontent.xx.fbcdn.net/v/t1.6435-1";
 
@@ -108,5 +111,49 @@ describe("extractCandidates", () => {
     expect(candidates[0]!.url).not.toContain("ctp=s480x480");
     expect(candidates[0]!.url).toContain("cstp=mx2048x2048");
     expect(candidates[1]!.url).toContain("ctp=s480x480");
+  });
+});
+
+describe("extractCoverCandidates", () => {
+  it("extracts a cover image and prefers the ctp-free URL", () => {
+    const url = `${CDN}/cover.jpg?cstp=mx2048x2048&ctp=s851x315&oe=abc`;
+    const candidates = extractCoverCandidates(
+      `<img alt="Cover photo" src="${url.replaceAll("&", "&amp;")}">`,
+    );
+
+    expect(candidates).toHaveLength(2);
+    expect(candidates[0]!.source).toBe("cover-html");
+    expect(candidates[0]!.url).not.toContain("ctp=");
+    expect(candidates[1]!.url).toContain("ctp=s851x315");
+  });
+
+  it("extracts cover data from JSON scripts", () => {
+    const url = `${CDN}/cover.jpg?oe=abc`;
+    const candidates = extractCoverCandidates(
+      `<script type="application/json">${JSON.stringify({ cover_photo: { image: { uri: url } } })}</script>`,
+    );
+
+    expect(candidates).toContainEqual({
+      url,
+      source: "cover-data",
+      verified: false,
+    });
+  });
+
+  it("extracts escaped cover URLs from JavaScript payloads", () => {
+    const url = `${CDN}/cover.jpg?oe=abc`;
+    const escaped = url.replaceAll("/", "\\/");
+    const candidates = extractCoverCandidates(
+      `<script>requireLazy({"cover_photo":{"uri":"${escaped}"}});</script>`,
+    );
+
+    expect(candidates.some((candidate) => candidate.url === url)).toBe(true);
+  });
+
+  it("does not confuse an ordinary image with a cover", () => {
+    const url = `${CDN}/profile.jpg?oe=abc`;
+    expect(
+      extractCoverCandidates(`<img alt="Profile photo" src="${url}">`),
+    ).toHaveLength(0);
   });
 });

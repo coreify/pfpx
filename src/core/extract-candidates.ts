@@ -21,8 +21,11 @@ export function cleanCandidateUrl(rawUrl: string): string {
   return rawUrl
     .replace(/&amp;/g, "&")
     .replace(/\\\//g, "/")
-    .replace(/\\u0025/g, "%")
-    .replace(/\\u0026/g, "&");
+    .replace(/\\u0025/gi, "%")
+    .replace(/\\u0026/gi, "&")
+    .replace(/\\u002f/gi, "/")
+    .replace(/\\u003a/gi, ":")
+    .replace(/\\u003d/gi, "=");
 }
 
 function createCandidatePair(
@@ -221,4 +224,130 @@ export function extractCandidates(
   }
 
   return deduplicateByUrl(all);
+}
+
+const COVER_KEYS = new Set([
+  "cover",
+  "cover_photo",
+  "coverphoto",
+  "cover_image",
+  "coverimage",
+]);
+
+function collectCdnUrls(
+  value: unknown,
+  candidates: ImageCandidate[],
+  depth = 0,
+): void {
+  if (depth > 20 || value == null) return;
+  if (typeof value === "string") {
+    candidates.push(...createCandidatePair(value, "cover-data"));
+    return;
+  }
+  if (typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectCdnUrls(item, candidates, depth + 1);
+    return;
+  }
+  for (const nested of Object.values(value as Record<string, unknown>)) {
+    collectCdnUrls(nested, candidates, depth + 1);
+  }
+}
+
+function findCoverData(
+  value: unknown,
+  candidates: ImageCandidate[],
+  depth = 0,
+): void {
+  if (depth > 20 || value == null || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const item of value) findCoverData(item, candidates, depth + 1);
+    return;
+  }
+  for (const [key, nested] of Object.entries(
+    value as Record<string, unknown>,
+  )) {
+    const normalizedKey = key.toLowerCase().replace(/[^a-z_]/g, "");
+    if (COVER_KEYS.has(normalizedKey)) {
+      collectCdnUrls(nested, candidates, depth + 1);
+    } else {
+      findCoverData(nested, candidates, depth + 1);
+    }
+  }
+}
+
+function extractCoverUrlsFromScript(
+  text: string,
+  candidates: ImageCandidate[],
+): void {
+  const marker = /(?:cover_photo|coverPhoto|cover_image|coverImage)/g;
+  let markerMatch: RegExpExecArray | null;
+  while ((markerMatch = marker.exec(text)) != null) {
+    const window = cleanCandidateUrl(
+      text.slice(markerMatch.index, markerMatch.index + 50_000),
+    );
+    const urls =
+      window.match(
+        /https:[^"'\\<>\s]+(?:fbcdn\.net|facebook\.com|fbsbx\.com)[^"'\\<>\s]*/g,
+      ) ?? [];
+    for (const url of urls.slice(0, 20)) {
+      candidates.push(...createCandidatePair(url, "cover-data"));
+    }
+  }
+}
+
+export function extractCoverCandidates(
+  html: string,
+  options: ExtractCandidatesOptions = {},
+): ImageCandidate[] {
+  const candidates: ImageCandidate[] = [];
+  const verbose = options.verbose ?? false;
+  const $ = cheerio.load(html);
+
+  $("img").each((_, el) => {
+    const image = $(el);
+    const context = [
+      image.attr("alt"),
+      image.attr("title"),
+      image.attr("aria-label"),
+      image.attr("class"),
+      image.attr("id"),
+      image.closest('[aria-label*="cover" i]').attr("aria-label"),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (!context.includes("cover")) return;
+
+    for (const rawUrl of [image.attr("src"), image.attr("data-src")]) {
+      if (rawUrl) {
+        candidates.push(...createCandidatePair(rawUrl, "cover-html"));
+      }
+    }
+  });
+
+  $("script").each((_, el) => {
+    const text = $(el).html() ?? "";
+    if (
+      text.length > 2 * 1024 * 1024 ||
+      !/(?:cover_photo|coverPhoto|cover_image|coverImage)/.test(text)
+    ) {
+      return;
+    }
+    try {
+      findCoverData(JSON.parse(text), candidates);
+    } catch {
+      extractCoverUrlsFromScript(text, candidates);
+    }
+  });
+
+  const unique = deduplicateByUrl(candidates);
+  if (verbose) {
+    for (const candidate of unique) {
+      process.stderr.write(
+        `[pfpx] Found ${candidate.source} image: ${candidate.url}\n`,
+      );
+    }
+  }
+  return unique;
 }

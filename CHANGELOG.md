@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0] - 2026-10-15
+
+### Added
+
+- Stable `identifier` result field: username when available, numeric profile ID otherwise
+- `getCoverPictureImage()` for best-effort original public cover download
+
 ## [1.1.0] - 2026-10-15
 
 ### Added

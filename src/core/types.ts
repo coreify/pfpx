@@ -1,5 +1,10 @@
 export type ImageSource =
-  "og:image" | "twitter:image" | "structured-data" | "public-html";
+  | "og:image"
+  | "twitter:image"
+  | "structured-data"
+  | "public-html"
+  | "cover-html"
+  | "cover-data";
 
 export interface ImageCandidate {
   url: string;
@@ -12,6 +17,7 @@ export interface ImageCandidate {
 export interface ProfileImageResult {
   inputUrl: string;
   profileUrl: string;
+  identifier: string;
   imageUrl: string | null;
   width: number | null;
   height: number | null;

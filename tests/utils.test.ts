@@ -74,6 +74,7 @@ describe("printResult", () => {
     const res: ProfileImageResult = {
       inputUrl: "https://www.facebook.com/user",
       profileUrl: "https://www.facebook.com/user",
+      identifier: "user",
       imageUrl: "https://scontent.xx.fbcdn.net/photo.jpg",
       width: 480,
       height: 480,
@@ -90,6 +91,7 @@ describe("printResult", () => {
     const res: ProfileImageResult = {
       inputUrl: "https://www.facebook.com/user",
       profileUrl: "https://www.facebook.com/user",
+      identifier: "user",
       imageUrl: "https://scontent.xx.fbcdn.net/photo.jpg",
       width: 480,
       height: 480,
@@ -107,6 +109,7 @@ describe("printResult", () => {
     const res: ProfileImageResult = {
       inputUrl: "https://www.facebook.com/user",
       profileUrl: "https://www.facebook.com/user",
+      identifier: "user",
       imageUrl: "https://scontent.xx.fbcdn.net/best.jpg",
       width: 500,
       height: 500,

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   normalizeProfileUrl,
   normalizeProfileInput,
+  getProfileIdentifier,
   isFacebookHost,
   isAllowedProfileHost,
   isSafeFacebookCdnUrl,
@@ -182,6 +183,18 @@ describe("normalizeProfileInput", () => {
     expect(
       normalizeProfileInput("https://user:pass@facebook.com:8443/zuck"),
     ).toBe("https://www.facebook.com/zuck");
+  });
+});
+
+describe("getProfileIdentifier", () => {
+  it("uses username when present", () => {
+    expect(getProfileIdentifier("https://www.facebook.com/zuck")).toBe("zuck");
+  });
+
+  it("falls back to numeric ID", () => {
+    expect(
+      getProfileIdentifier("https://www.facebook.com/profile.php?id=123456789"),
+    ).toBe("123456789");
   });
 });
 

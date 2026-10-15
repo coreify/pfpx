@@ -1,6 +1,6 @@
 {
   "name": "@coreify/pfpx",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "CLI to retrieve the highest-resolution public Facebook profile picture URL.",
   "type": "module",
   "main": "./dist/index.js",
