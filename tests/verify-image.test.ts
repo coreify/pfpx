@@ -297,6 +297,19 @@ describe("downloadFacebookImage", () => {
     await expect(
       downloadFacebookImage(CDN_URL, { maxBytes: 0 }),
     ).rejects.toThrow("positive integer");
+    await expect(
+      downloadFacebookImage(CDN_URL, { maxBytes: 1.5 }),
+    ).rejects.toThrow("positive integer");
+  });
+
+  it("maps download failures and timeouts to package errors", async () => {
+    vi.mocked(fetch)
+      .mockRejectedValueOnce(new Error("socket closed"))
+      .mockRejectedValueOnce(new DOMException("Aborted", "AbortError"));
+    await expect(downloadFacebookImage(CDN_URL)).rejects.toThrow(
+      "socket closed",
+    );
+    await expect(downloadFacebookImage(CDN_URL)).rejects.toBeInstanceOf(Error);
   });
 
   it("rejects unsupported MIME types", async () => {
