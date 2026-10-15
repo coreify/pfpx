@@ -318,15 +318,13 @@ describe("downloadFacebookImage", () => {
   });
 
   it("rejects declared and streamed oversized images", async () => {
+    const declaredOversized = makeStreamResponse(
+      createPngBytes(1, 1),
+      "image/png",
+    );
+    declaredOversized.headers.set("content-length", "100");
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        new Response(createPngBytes(1, 1), {
-          headers: {
-            "content-type": "image/png",
-            "content-length": "100",
-          },
-        }),
-      )
+      .mockResolvedValueOnce(declaredOversized)
       .mockResolvedValueOnce(
         makeStreamResponse(createPngBytes(2, 2), "image/png"),
       );
