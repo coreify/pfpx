@@ -147,12 +147,14 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
           timeoutMs,
           verbose: opts.verbose,
           verifyImages: opts.verify,
+          allowSmallCover: true,
         })
       : null;
     const result = opts.both
       ? null
       : opts.cover
         ? await getCoverPicture(profileUrl, {
+            allowSmallCover: true,
             timeoutMs,
             verbose: opts.verbose,
           })

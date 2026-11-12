@@ -75,13 +75,19 @@ async function profileFromPage(
 ): Promise<ProfileImageResult> {
   const { timeoutMs, verbose, verifyImages = true } = options;
   const fetchOptions = { timeoutMs, verbose };
-  if (detectLoginWall(html)) {
-    throw new NoImageFoundError(
-      "Facebook returned a login page. The profile may require authentication to view.",
-    );
-  }
-
   let candidates = extractCandidates(html, finalUrl, { verbose });
+  const loginPrompt = detectLoginWall(html);
+  if (loginPrompt) {
+    // A limited public profile may include a login prompt beside its real avatar.
+    // Never treat unrelated images in the login page as this person's avatar.
+    candidates = candidates.filter(
+      (candidate) => candidate.source !== "public-html",
+    );
+    if (candidates.length === 0)
+      throw new NoImageFoundError(
+        "Facebook returned a login page. No public profile image metadata was exposed.",
+      );
+  }
 
   if (candidates.length === 0) {
     throw new NoImageFoundError(
@@ -101,6 +107,20 @@ async function profileFromPage(
   }
 
   const warnings: string[] = [];
+  if (loginPrompt)
+    warnings.push(
+      "Facebook shows a login prompt; only publicly exposed image metadata was used.",
+    );
+  if (
+    best.verified &&
+    best.width &&
+    best.height &&
+    Math.min(best.width, best.height) < 400
+  ) {
+    warnings.push(
+      `Only a ${best.width}×${best.height} public image was verified; a larger original is not confirmed.`,
+    );
+  }
   if (!best.verified) {
     warnings.push(
       "Image dimensions could not be verified. URL may or may not be accessible.",
@@ -134,7 +154,14 @@ export async function getProfilePictureImage(
     verifyImages: false,
   });
 
-  const remaining = [...(result.candidates ?? [])];
+  const discovered = result.candidates ?? [];
+  const authoritative = discovered.filter(
+    (candidate) => candidate.source !== "public-html",
+  );
+  // Exhaust public metadata for this profile without falling through to friends' avatars.
+  const remaining = [
+    ...(authoritative.length > 0 ? authoritative : discovered),
+  ];
   let lastError: unknown;
   for (let attempt = 0; attempt < 5 && remaining.length > 0; attempt++) {
     const candidate = selectBest(remaining);
@@ -153,6 +180,29 @@ export async function getProfilePictureImage(
         source: candidate.source,
         data: image.data,
         contentType: image.contentType,
+        candidates: result.candidates?.map((item) =>
+          item.url === candidate.url
+            ? {
+                ...item,
+                width: image.width,
+                height: image.height,
+                verified: true,
+              }
+            : item,
+        ),
+        warning: [
+          result.warning
+            ?.replace(
+              "Image dimensions could not be verified. URL may or may not be accessible.",
+              "",
+            )
+            .trim(),
+          Math.min(image.width, image.height) < 400
+            ? `Only a ${image.width}×${image.height} public image was verified; a larger original is not confirmed.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
       };
     } catch (error: unknown) {
       lastError = error;
@@ -183,16 +233,15 @@ async function coverFromPage(
   { html, finalUrl }: { html: string; finalUrl: string },
   options: GetProfilePictureImageOptions,
 ): Promise<ProfileImageDownloadResult> {
-  if (detectLoginWall(html)) {
-    throw new NoImageFoundError(
-      "Facebook returned a login page. The cover may require authentication to view.",
-    );
-  }
-
   const candidates = extractCoverCandidates(html, {
     verbose: options.verbose,
   });
+  if (detectLoginWall(html) && candidates.length === 0)
+    throw new NoImageFoundError(
+      "Facebook returned a login page. No public cover metadata was exposed.",
+    );
   let lastError: unknown;
+  let smallerCover: ProfileImageDownloadResult | undefined;
   for (const candidate of candidates.slice(0, 5)) {
     try {
       const image = await downloadFacebookImage(candidate.url, {
@@ -200,15 +249,11 @@ async function coverFromPage(
         verbose: options.verbose,
         maxBytes: options.maxBytes,
       });
-      if (
-        image.width / image.height < 1.3 ||
+      if (image.width / image.height < 1.3) continue;
+      const isSmall =
         image.width < MIN_HIGH_QUALITY_COVER_WIDTH ||
-        image.height < MIN_HIGH_QUALITY_COVER_HEIGHT
-      ) {
-        continue;
-      }
-
-      return {
+        image.height < MIN_HIGH_QUALITY_COVER_HEIGHT;
+      const result: ProfileImageDownloadResult = {
         metadata: extractProfileMetadata(html),
         inputUrl: rawInput,
         profileUrl: finalUrl,
@@ -223,11 +268,25 @@ async function coverFromPage(
         data: image.data,
         contentType: image.contentType,
       };
+      if (!isSmall) return result;
+      if (
+        options.allowSmallCover &&
+        (!smallerCover ||
+          image.width * image.height >
+            (smallerCover.width ?? 0) * (smallerCover.height ?? 0))
+      ) {
+        smallerCover = {
+          ...result,
+          warning:
+            "Only a display-sized public cover was verified; a larger original is not confirmed. Facebook CDN URLs expire.",
+        };
+      }
     } catch (error: unknown) {
       lastError = error;
     }
   }
 
+  if (smallerCover) return smallerCover;
   if (candidates.length > 0 && lastError instanceof Error) throw lastError;
   throw new NoImageFoundError("No downloadable public cover picture found.");
 }

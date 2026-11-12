@@ -90,8 +90,14 @@ console.log(coverMetadata.imageUrl);
 
 - Operates only on publicly accessible profile data without credentials or cookies.
 - Facebook CDN URLs expire after a few days. Re-run if link expires.
-- Cover lookup is best-effort and rejects display-sized images below 1200 × 400.
+- Cover lookup is best-effort. CLI keeps a verified smaller public cover when no cover at least 1200 × 400 can be downloaded. API callers can opt in with `allowSmallCover: true`; the default API quality floor stays unchanged.
 
 ## License
 
 MIT
+
+## Locked profiles and limited public views
+
+The CLI prioritizes the best image Facebook actually exposes to an unauthenticated visitor. A login prompt alongside public profile metadata no longer causes an immediate failure. Static Facebook logos and unrelated images on login pages are ignored. If an original-size avatar URL fails, its public cropped variant can still succeed; unrelated friend avatars are never used as replacement candidates when target metadata exists.
+
+`--cover` and `--both` retain smaller verified public covers, with an explicit quality warning. An available image is not proof that a profile is unlocked. No lock status, private biography, friend list, or full-resolution access is inferred. Locked profiles may expose only a thumbnail or no image at all. The CLI does not log in, change privacy settings, or obtain friend-only images.

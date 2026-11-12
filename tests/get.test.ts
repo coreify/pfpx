@@ -334,3 +334,119 @@ describe("combined media and public metadata", () => {
     });
   });
 });
+
+describe("limited public profile views", () => {
+  beforeEach(() => vi.mocked(fetch).mockReset());
+  const jpeg = (width: number, height: number) =>
+    new Uint8Array([
+      0xff,
+      0xd8,
+      0xff,
+      0xc0,
+      0,
+      0x11,
+      8,
+      height >> 8,
+      height & 255,
+      width >> 8,
+      width & 255,
+    ]);
+  const imageResponse = (width: number, height: number) =>
+    new Response(jpeg(width, height), {
+      headers: { "content-type": "image/jpeg" },
+    });
+
+  it("keeps public avatar metadata when Facebook displays a login prompt", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        makeResponseStream(
+          `${makeHtmlWithOg(PROFILE_IMAGE)}<div>Log in to Facebook</div>`,
+        ),
+      )
+      .mockResolvedValueOnce(imageResponse(200, 200));
+    const result = await getProfilePicture("testuser");
+    expect(result.imageUrl).toBe(PROFILE_IMAGE);
+    expect(result.width).toBe(200);
+    expect(result.warning).toContain("only publicly exposed");
+    expect(result.warning).toContain("larger original is not confirmed");
+  });
+
+  it("rejects a login-page logo instead of calling it an avatar", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponseStream(
+        '<title>Log in to Facebook</title><meta property="og:image" content="https://static.xx.fbcdn.net/rsrc.php/logo.png">',
+      ),
+    );
+    await expect(getProfilePicture("testuser")).rejects.toThrow(
+      "No public profile image metadata",
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not use unrelated public HTML images from a login page", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponseStream(
+        `<div>Log in to Facebook</div><img alt="Profile picture" src="${PROFILE_IMAGE}">`,
+      ),
+    );
+    await expect(getProfilePicture("testuser")).rejects.toThrow(
+      NoImageFoundError,
+    );
+  });
+
+  it("does not download a friend's avatar when the target's image fails", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        makeResponseStream(
+          `${makeHtmlWithOg(PROFILE_IMAGE)}<img alt="Profile picture" src="${CDN}/friend.jpg">`,
+        ),
+      )
+      .mockResolvedValue(new Response(null, { status: 404 }));
+    await expect(getProfilePictureImage("testuser")).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to the actually public crop when the original is unavailable", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        makeResponseStream(makeHtmlWithOg(`${PROFILE_IMAGE}&ctp=s200x200`)),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(imageResponse(200, 200));
+    const result = await getProfilePictureImage("testuser");
+    expect(result.width).toBe(200);
+    expect(result.imageUrl).toContain("ctp=");
+    expect(result.warning).toContain("larger original is not confirmed");
+    expect(result.warning).not.toContain("could not be verified");
+    expect(
+      result.candidates?.find((candidate) => candidate.url === result.imageUrl)
+        ?.verified,
+    ).toBe(true);
+  });
+
+  it("allows a smaller public cover beside a login prompt when requested", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        makeResponseStream(
+          `<div>Log in to Facebook</div><img alt="Cover photo" src="${CDN}/cover.jpg">`,
+        ),
+      )
+      .mockResolvedValueOnce(imageResponse(851, 315));
+    const result = await getCoverPictureImage("testuser", {
+      allowSmallCover: true,
+    });
+    expect(result.width).toBe(851);
+    expect(result.warning).toContain("display-sized public cover");
+  });
+
+  it("still rejects square avatars as covers in limited-size mode", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        makeResponseStream(`<img alt="Cover photo" src="${CDN}/cover.jpg">`),
+      )
+      .mockResolvedValueOnce(imageResponse(200, 200));
+    await expect(
+      getCoverPictureImage("testuser", { allowSmallCover: true }),
+    ).rejects.toThrow(NoImageFoundError);
+  });
+});

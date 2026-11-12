@@ -50,6 +50,8 @@ export interface GetProfilePictureOptions {
 }
 
 export interface GetProfilePictureImageOptions extends GetProfilePictureOptions {
+  /** Return the best verified public cover even below the high-quality floor. */
+  allowSmallCover?: boolean | undefined;
   maxBytes?: number | undefined;
 }
 

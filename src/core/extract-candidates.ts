@@ -34,6 +34,12 @@ function createCandidatePair(
 ): ImageCandidate[] {
   const cleaned = cleanCandidateUrl(rawUrl);
   if (!isSafeFacebookCdnUrl(cleaned)) return [];
+  const parsed = new URL(cleaned);
+  if (
+    /^static[.-]/i.test(parsed.hostname) ||
+    parsed.pathname.includes("/rsrc.php/")
+  )
+    return [];
   const list: ImageCandidate[] = [];
 
   const highRes = removeCtpFromCdnUrl(cleaned);
