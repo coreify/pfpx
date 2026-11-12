@@ -3,6 +3,7 @@ export {
   getProfilePictureImage,
   getCoverPicture,
   getCoverPictureImage,
+  getProfileMedia,
 } from "./commands/get.js";
 export {
   normalizeProfileUrl,
@@ -27,6 +28,8 @@ export {
 } from "./utils/errors.js";
 export type {
   ProfileImageResult,
+  ProfileMediaResult,
+  PublicProfileMetadata,
   GetProfilePictureOptions,
   GetProfilePictureImageOptions,
   ProfileImageDownloadResult,

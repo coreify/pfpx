@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add `--both` and `getProfileMedia()` for avatar and cover extraction from one page, with independent image errors and partial results.
+- Add `--info` and public title, description, and page-type metadata to image results.
+- Keep URLs and JSON on stdout; route human-readable details to stderr.
+- Validate the entire timeout argument and avoid spinners in redirected output.
+
 ## [1.2.1] - 2026-10-15
 
 ### Added

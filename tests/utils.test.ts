@@ -195,3 +195,60 @@ describe("openInBrowser & copyToClipboard", () => {
     expect(success).toBe(false);
   });
 });
+
+describe("advanced output", () => {
+  afterEach(() => vi.restoreAllMocks());
+  it("prints measured quality and public metadata", async () => {
+    const { printImageInfo } = await import("../src/utils/output.js");
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    printImageInfo(
+      {
+        inputUrl: "testuser",
+        profileUrl: "https://www.facebook.com/testuser",
+        identifier: "testuser",
+        imageUrl: null,
+        width: 2000,
+        height: 1000,
+        source: "cover-data",
+        metadata: { name: "Public title", description: "Bio", type: "profile" },
+      },
+      "Cover picture",
+    );
+    expect(stderr.mock.calls.flat().join("")).toContain("2.00 MP");
+    expect(stderr.mock.calls.flat().join("")).toContain("Public title");
+  });
+
+  it("prints partial results and missing-cover diagnostic in text mode", async () => {
+    const { printMediaResult } = await import("../src/utils/output.js");
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    printMediaResult(
+      {
+        inputUrl: "testuser",
+        profileUrl: "https://www.facebook.com/testuser",
+        identifier: "testuser",
+        metadata: { name: null, description: null, type: null },
+        profile: {
+          inputUrl: "testuser",
+          profileUrl: "https://www.facebook.com/testuser",
+          identifier: "testuser",
+          imageUrl: "https://scontent.xx.fbcdn.net/avatar.jpg",
+          width: null,
+          height: null,
+          source: null,
+        },
+        cover: null,
+        errors: { cover: { error: "No cover", code: "NO_IMAGE_FOUND" } },
+      },
+      { info: true },
+    );
+    expect(log).toHaveBeenCalledWith(
+      "https://scontent.xx.fbcdn.net/avatar.jpg",
+    );
+    expect(stderr.mock.calls.flat().join("")).toContain("cover: No cover");
+  });
+});

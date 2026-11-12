@@ -263,3 +263,74 @@ describe("getCoverPictureImage", () => {
     );
   });
 });
+
+describe("combined media and public metadata", () => {
+  beforeEach(() => vi.mocked(fetch).mockReset());
+
+  it("uses one page for both images and returns no binary data", async () => {
+    const { getProfileMedia } = await import("../src/commands/get.js");
+    const cover = `${CDN}/cover.jpg?oe=cover`;
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        makeResponseStream(
+          `<meta property="og:title" content="Test &amp; User"><meta property="og:description" content="Public bio"><meta property="og:type" content="profile"><meta property="og:image" content="${PROFILE_IMAGE}"><img alt="Cover photo" src="${cover}">`,
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0, 0x11, 8, 3, 0x20, 8, 0]),
+          { headers: { "content-type": "image/jpeg" } },
+        ),
+      );
+    const result = await getProfileMedia("testuser", { verifyImages: false });
+    expect(result.metadata).toEqual({
+      name: "Test & User",
+      description: "Public bio",
+      type: "profile",
+    });
+    expect(result.profile?.imageUrl).toBe(PROFILE_IMAGE);
+    expect(result.cover?.width).toBe(2048);
+    expect(result.errors).toEqual({});
+    expect(result.cover).not.toHaveProperty("data");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves avatar when cover is absent", async () => {
+    const { getProfileMedia } = await import("../src/commands/get.js");
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponseStream(makeHtmlWithOg(PROFILE_IMAGE)),
+    );
+    const result = await getProfileMedia("testuser", { verifyImages: false });
+    expect(result.profile?.imageUrl).toBe(PROFILE_IMAGE);
+    expect(result.cover).toBeNull();
+    expect(result.errors.cover?.code).toBe("NO_IMAGE_FOUND");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports both missing images with metadata intact", async () => {
+    const { getProfileMedia } = await import("../src/commands/get.js");
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponseStream(
+        '<title>Public title</title><meta name="description" content="Public description">',
+      ),
+    );
+    const result = await getProfileMedia("testuser");
+    expect(result.profile).toBeNull();
+    expect(result.cover).toBeNull();
+    expect(result.metadata.name).toBe("Public title");
+    expect(result.metadata.description).toBe("Public description");
+    expect(result.errors.profile?.code).toBe("NO_IMAGE_FOUND");
+  });
+
+  it("adds optional metadata to existing single-image lookup", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      makeResponseStream(makeHtmlWithOg(PROFILE_IMAGE)),
+    );
+    const result = await getProfilePicture("testuser", { verifyImages: false });
+    expect(result.metadata).toEqual({
+      name: null,
+      description: null,
+      type: null,
+    });
+  });
+});

@@ -14,7 +14,24 @@ export interface ImageCandidate {
   verified: boolean;
 }
 
+export interface PublicProfileMetadata {
+  name: string | null;
+  description: string | null;
+  type: string | null;
+}
+
+export interface ProfileMediaResult {
+  inputUrl: string;
+  profileUrl: string;
+  identifier: string;
+  metadata: PublicProfileMetadata;
+  profile: ProfileImageResult | null;
+  cover: ProfileImageResult | null;
+  errors: { profile?: ErrorResult; cover?: ErrorResult };
+}
+
 export interface ProfileImageResult {
+  metadata?: PublicProfileMetadata | undefined;
   inputUrl: string;
   profileUrl: string;
   identifier: string;

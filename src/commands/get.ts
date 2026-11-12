@@ -1,3 +1,4 @@
+import { extractProfileMetadata } from "../core/profile-metadata.js";
 import {
   getProfileIdentifier,
   normalizeProfileInput,
@@ -18,6 +19,7 @@ import type {
   GetProfilePictureOptions,
   GetProfilePictureImageOptions,
   ProfileImageDownloadResult,
+  ProfileMediaResult,
 } from "../core/types.js";
 
 const MIN_HIGH_QUALITY_COVER_WIDTH = 1_200;
@@ -48,7 +50,7 @@ export async function getProfilePicture(
   options: GetProfilePictureOptions = {},
 ): Promise<ProfileImageResult> {
   const profileUrl = normalizeProfileInput(rawUrl);
-  const { timeoutMs, verbose, verifyImages = true } = options;
+  const { timeoutMs, verbose } = options;
 
   const fetchOptions = { timeoutMs, verbose };
 
@@ -63,6 +65,16 @@ export async function getProfilePicture(
     throw new NetworkError(String(err));
   }
 
+  return profileFromPage(rawUrl, { html, finalUrl }, options);
+}
+
+async function profileFromPage(
+  rawUrl: string,
+  { html, finalUrl }: { html: string; finalUrl: string },
+  options: GetProfilePictureOptions,
+): Promise<ProfileImageResult> {
+  const { timeoutMs, verbose, verifyImages = true } = options;
+  const fetchOptions = { timeoutMs, verbose };
   if (detectLoginWall(html)) {
     throw new NoImageFoundError(
       "Facebook returned a login page. The profile may require authentication to view.",
@@ -99,6 +111,7 @@ export async function getProfilePicture(
   );
 
   return {
+    metadata: extractProfileMetadata(html),
     inputUrl: rawUrl,
     profileUrl: finalUrl,
     identifier: getProfileIdentifier(finalUrl),
@@ -162,6 +175,14 @@ export async function getCoverPictureImage(
     verbose: options.verbose,
   });
 
+  return coverFromPage(rawInput, { html, finalUrl }, options);
+}
+
+async function coverFromPage(
+  rawInput: string,
+  { html, finalUrl }: { html: string; finalUrl: string },
+  options: GetProfilePictureImageOptions,
+): Promise<ProfileImageDownloadResult> {
   if (detectLoginWall(html)) {
     throw new NoImageFoundError(
       "Facebook returned a login page. The cover may require authentication to view.",
@@ -188,6 +209,7 @@ export async function getCoverPictureImage(
       }
 
       return {
+        metadata: extractProfileMetadata(html),
         inputUrl: rawInput,
         profileUrl: finalUrl,
         identifier: getProfileIdentifier(finalUrl),
@@ -215,7 +237,12 @@ export async function getCoverPicture(
   options: GetProfilePictureImageOptions = {},
 ): Promise<ProfileImageResult> {
   const result = await getCoverPictureImage(rawInput, options);
+  return imageMetadata(result);
+}
+
+function imageMetadata(result: ProfileImageDownloadResult): ProfileImageResult {
   return {
+    metadata: result.metadata,
     inputUrl: result.inputUrl,
     profileUrl: result.profileUrl,
     identifier: result.identifier,
@@ -225,5 +252,45 @@ export async function getCoverPicture(
     source: result.source,
     candidates: result.candidates,
     warning: result.warning,
+  };
+}
+
+/** Retrieve both images from one public page, preserving partial successes. */
+export async function getProfileMedia(
+  rawInput: string,
+  options: GetProfilePictureImageOptions = {},
+): Promise<ProfileMediaResult> {
+  const page = await fetchPublicPage(normalizeProfileInput(rawInput), options);
+  const [profile, cover] = await Promise.allSettled([
+    profileFromPage(rawInput, page, options),
+    coverFromPage(rawInput, page, options),
+  ]);
+  const result: ProfileMediaResult = {
+    inputUrl: rawInput,
+    profileUrl: page.finalUrl,
+    identifier: getProfileIdentifier(page.finalUrl),
+    metadata: extractProfileMetadata(page.html),
+    profile: null,
+    cover: null,
+    errors: {},
+  };
+  if (profile.status === "fulfilled") result.profile = profile.value;
+  else result.errors.profile = mediaError(profile.reason, rawInput);
+  if (cover.status === "fulfilled") {
+    result.cover = imageMetadata(cover.value);
+  } else result.errors.cover = mediaError(cover.reason, rawInput);
+  return result;
+}
+
+function mediaError(error: unknown, inputUrl: string) {
+  return {
+    error: error instanceof Error ? error.message : String(error),
+    code:
+      error instanceof Error &&
+      "code" in error &&
+      typeof error.code === "string"
+        ? error.code
+        : "UNKNOWN",
+    inputUrl,
   };
 }

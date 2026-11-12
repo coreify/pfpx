@@ -1,11 +1,20 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { intro, text, spinner, outro, isCancel, cancel } from "@clack/prompts";
-import { getCoverPicture, getProfilePicture } from "./commands/get.js";
-import { printResult, printError } from "./utils/output.js";
+import {
+  getCoverPicture,
+  getProfilePicture,
+  getProfileMedia,
+} from "./commands/get.js";
+import {
+  printResult,
+  printError,
+  printImageInfo,
+  printMediaResult,
+} from "./utils/output.js";
 import { openInBrowser } from "./utils/open-browser.js";
 import { copyToClipboard } from "./utils/clipboard.js";
-import { EXIT_CODES } from "./core/types.js";
+import { type ProfileImageResult, EXIT_CODES } from "./core/types.js";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -27,12 +36,17 @@ function getPackageVersion(): string {
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   const program = new Command("pfpx")
     .description(
-      "Retrieve the highest-resolution public Facebook profile picture URL.",
+      "Retrieve public Facebook profile and cover images with public profile details.",
     )
     .argument("[url]", "Facebook profile URL")
     .option("--json", "Output JSON to stdout; diagnostics to stderr")
     .option("--all", "Show all discovered image candidates")
     .option("--cover", "Retrieve cover picture instead of profile picture")
+    .option(
+      "--both",
+      "Retrieve profile and cover pictures from one public page",
+    )
+    .option("--info", "Show public profile details and image quality on stderr")
     .option("--open", "Open the image URL in the default browser")
     .option("--copy", "Copy the image URL to the clipboard")
     .option("--verbose", "Show extraction steps and request info")
@@ -47,6 +61,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     json?: boolean;
     all?: boolean;
     cover?: boolean;
+    both?: boolean;
+    info?: boolean;
     open?: boolean;
     copy?: boolean;
     verbose?: boolean;
@@ -67,6 +83,13 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return EXIT_CODES.SUCCESS;
     }
     process.stderr.write(`✖ ${e.message ?? String(err)}\n`);
+    return EXIT_CODES.GENERAL_ERROR;
+  }
+
+  if (opts.cover && opts.both) {
+    printError(new Error("Use either --cover or --both, not both."), {
+      json: opts.json,
+    });
     return EXIT_CODES.GENERAL_ERROR;
   }
 
@@ -97,43 +120,78 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     profileUrl = parsedUrl;
   }
 
-  const timeoutMs = parseInt(opts.timeout, 10);
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
-    process.stderr.write("✖ --timeout must be a positive integer.\n");
+  const timeoutMs = Number(opts.timeout);
+  if (
+    !/^\d+$/.test(opts.timeout) ||
+    !Number.isSafeInteger(timeoutMs) ||
+    timeoutMs <= 0 ||
+    timeoutMs > 2_147_483_647
+  ) {
+    process.stderr.write(
+      "✖ --timeout must be an integer from 1 to 2147483647.\n",
+    );
     return EXIT_CODES.GENERAL_ERROR;
   }
-  const s = opts.json ? null : spinner();
+  const s = opts.json || !process.stderr.isTTY ? null : spinner();
   s?.start(
-    opts.cover ? "Extracting cover image…" : "Extracting profile image…",
+    opts.both
+      ? "Extracting profile and cover images…"
+      : opts.cover
+        ? "Extracting cover image…"
+        : "Extracting profile image…",
   );
 
   try {
-    const result = opts.cover
-      ? await getCoverPicture(profileUrl, {
+    const media = opts.both
+      ? await getProfileMedia(profileUrl, {
           timeoutMs,
           verbose: opts.verbose,
+          verifyImages: opts.verify,
         })
-      : await getProfilePicture(profileUrl, {
-          timeoutMs,
-          verbose: opts.verbose,
-          verifyImages: opts.verify !== false,
-        });
+      : null;
+    const result = opts.both
+      ? null
+      : opts.cover
+        ? await getCoverPicture(profileUrl, {
+            timeoutMs,
+            verbose: opts.verbose,
+          })
+        : await getProfilePicture(profileUrl, {
+            timeoutMs,
+            verbose: opts.verbose,
+            verifyImages: opts.verify !== false,
+          });
 
     s?.stop("Done.");
 
-    printResult(result, { all: opts.all, json: opts.json });
+    if (media) printMediaResult(media, opts);
+    else if (result) {
+      if (opts.info && !opts.json)
+        printImageInfo(
+          result,
+          opts.cover ? "Cover picture" : "Profile picture",
+        );
+      printResult(result, { all: opts.all, json: opts.json });
+    }
+    const images = (media ? [media.profile, media.cover] : [result]).filter(
+      (image): image is ProfileImageResult => image !== null,
+    );
+    const urls = images.flatMap((image) =>
+      image.imageUrl ? [image.imageUrl] : [],
+    );
+    if (media && urls.length === 0) return EXIT_CODES.NO_IMAGE_FOUND;
 
-    if (opts.open && result.imageUrl) {
+    for (const imageUrl of opts.open ? urls : []) {
       try {
-        await openInBrowser(result.imageUrl);
+        await openInBrowser(imageUrl);
         if (!opts.json) process.stderr.write("Opened in browser.\n");
       } catch {
         process.stderr.write("Could not open browser.\n");
       }
     }
 
-    if (opts.copy && result.imageUrl) {
-      const copied = await copyToClipboard(result.imageUrl);
+    if (opts.copy && urls.length > 0) {
+      const copied = await copyToClipboard(urls.join("\n"));
       if (!opts.json) {
         process.stderr.write(
           copied ? "Copied to clipboard.\n" : "Could not copy to clipboard.\n",

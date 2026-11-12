@@ -2,6 +2,7 @@ import type {
   ProfileImageResult,
   ImageCandidate,
   ErrorResult,
+  ProfileMediaResult,
 } from "../core/types.js";
 
 export function printResult(
@@ -54,4 +55,53 @@ export function printError(
   }
   const msg = error instanceof Error ? error.message : String(error);
   process.stderr.write(`✖ ${msg}\n`);
+}
+
+export function printImageInfo(
+  result: ProfileImageResult,
+  label: string,
+): void {
+  const lines = [
+    `${label}: ${result.identifier}`,
+    `Profile: ${result.profileUrl}`,
+  ];
+  if (result.metadata?.name) lines.push(`Name: ${result.metadata.name}`);
+  if (result.metadata?.description)
+    lines.push(`Description: ${result.metadata.description}`);
+  if (result.metadata?.type) lines.push(`Page type: ${result.metadata.type}`);
+  if (result.width && result.height) {
+    lines.push(
+      `Resolution: ${result.width} × ${result.height} (${((result.width * result.height) / 1_000_000).toFixed(2)} MP)`,
+    );
+  } else lines.push("Resolution: unverified");
+  lines.push(`Source: ${result.source ?? "unknown"}`);
+  lines.push(`Candidates: ${result.candidates?.length ?? 0}`);
+  process.stderr.write(lines.join("\n") + "\n");
+}
+
+export function printMediaResult(
+  result: ProfileMediaResult,
+  options: {
+    json?: boolean | undefined;
+    all?: boolean | undefined;
+    info?: boolean | undefined;
+  },
+): void {
+  if (options.json) {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return;
+  }
+  for (const kind of ["profile", "cover"] as const) {
+    const image = result[kind];
+    if (image) {
+      if (options.info)
+        printImageInfo(
+          image,
+          kind === "profile" ? "Profile picture" : "Cover picture",
+        );
+      printResult(image, options);
+    } else if (result.errors[kind]) {
+      process.stderr.write(`${kind}: ${result.errors[kind].error}\n`);
+    }
+  }
 }

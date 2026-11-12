@@ -56,3 +56,76 @@ describe("CLI cover option", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("advanced CLI", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns one JSON document and partial results with --both", async () => {
+    vi.mocked(fetch)
+      .mockReset()
+      .mockResolvedValueOnce(
+        new Response(
+          '<meta property="og:title" content="Public name"><meta property="og:image" content="https://scontent.xx.fbcdn.net/avatar.jpg">',
+        ),
+      );
+    let output = "";
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      output += String(chunk);
+      return true;
+    });
+    expect(await main(["testuser", "--both", "--no-verify", "--json"])).toBe(0);
+    const result = JSON.parse(output) as {
+      profile: unknown;
+      cover: unknown;
+      metadata: { name: string };
+    };
+    expect(result.profile).not.toBeNull();
+    expect(result.cover).toBeNull();
+    expect(result.metadata.name).toBe("Public name");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("prints details on stderr while stdout retains the image URL", async () => {
+    vi.mocked(fetch)
+      .mockReset()
+      .mockResolvedValueOnce(
+        new Response(
+          '<meta property="og:title" content="Public name"><meta property="og:description" content="Public bio"><meta property="og:image" content="https://scontent.xx.fbcdn.net/avatar.jpg">',
+        ),
+      );
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const stdout = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    expect(await main(["testuser", "--info", "--no-verify"])).toBe(0);
+    expect(stdout).toHaveBeenCalledWith(
+      "https://scontent.xx.fbcdn.net/avatar.jpg",
+    );
+    expect(stderr.mock.calls.flat().join("")).toContain("Public bio");
+  });
+
+  it.each(["100oops", "1.5", "0", "2147483648"])(
+    "rejects invalid timeout %s before fetching",
+    async (timeout) => {
+      vi.mocked(fetch).mockReset();
+      vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      expect(await main(["testuser", "--timeout", timeout])).toBe(1);
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects conflicting image modes", async () => {
+    vi.mocked(fetch).mockReset();
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    expect(await main(["testuser", "--both", "--cover"])).toBe(1);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("returns a nonzero status if neither image exists", async () => {
+    vi.mocked(fetch)
+      .mockReset()
+      .mockResolvedValueOnce(new Response("<title>Empty profile</title>"));
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    expect(await main(["testuser", "--both", "--json"])).toBe(4);
+  });
+});
